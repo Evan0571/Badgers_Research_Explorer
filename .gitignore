@@ -22,6 +22,9 @@ coverage/
 .next/
 .expo/
 *.log
+*.tsbuildinfo
+output/
+.playwright-cli/
 
 # Local editor and operating system files
 .idea/
