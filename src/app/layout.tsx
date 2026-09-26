@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import "./apple.css";
+import "./layout.css";
 import { WorkspaceProvider } from "@/components/explorer/provider";
 const inter = localFont({
   src: [

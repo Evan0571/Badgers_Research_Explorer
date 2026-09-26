@@ -1,0 +1,467 @@
+/* The original split landing page and sidebar workspace, using Apple tokens.
+   Component behavior, colors, and fonts live in ui/, tokens.css, and apple.css. */
+.header-actions > .button {
+  font-size: 14px;
+}
+.landing-nav a {
+  font-size: 14px;
+}
+.hero h1 {
+  font-size: 56px;
+  line-height: 1.07;
+  letter-spacing: -0.28px;
+}
+.hero-description {
+  font-size: 17px;
+  line-height: 1.47;
+  max-width: 430px;
+}
+.hero-actions {
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.hero-actions .button {
+  font-size: 17px;
+}
+.hero-actions .quiet-link {
+  font-size: 14px;
+}
+.hero-preview {
+  transform: none;
+  border-radius: var(--radius-card);
+  padding: 24px;
+}
+.preview-heading {
+  font-size: 12px;
+}
+.preview-query {
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  line-height: 1.47;
+  padding: 14px 18px;
+}
+.preview-research {
+  border-radius: var(--radius-card);
+  box-shadow: none;
+  padding: 24px;
+}
+.preview-research h2 {
+  font-size: 34px;
+  line-height: 1.1;
+  letter-spacing: -0.374px;
+}
+.preview-research > p:not(.preview-dept) {
+  font-size: 14px;
+  line-height: 1.47;
+}
+.preview-dept {
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.preview-connection {
+  padding: 16px;
+  border-left: 0;
+  border-radius: var(--radius-control);
+  background: var(--soft);
+}
+.preview-connection p {
+  font-size: 14px;
+  line-height: 1.47;
+}
+.preview-connection .tiny-label {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.preview-footer > span,
+.preview-caption {
+  font-size: 12px;
+}
+.principles-strip span {
+  font-size: 14px;
+}
+.how-heading h2,
+.trust-inner h2,
+.faq-section > h2,
+.final-cta h2 {
+  font-size: 40px;
+  line-height: 1.1;
+}
+.how-heading > p,
+.steps p {
+  font-size: 17px;
+  line-height: 1.47;
+}
+.steps h3 {
+  font-size: 21px;
+  line-height: 1.24;
+}
+.step-icon {
+  border-radius: var(--radius-card);
+  background: var(--soft);
+}
+.research-illustration {
+  filter: grayscale(1);
+}
+[data-theme="dark"] .research-illustration {
+  filter: grayscale(1) invert(0.85);
+  mix-blend-mode: screen;
+}
+.trust-inner .eyebrow {
+  color: var(--text-on-dark);
+}
+.trust-copy > p {
+  color: var(--on-dark);
+  font-size: 17px;
+  line-height: 1.47;
+}
+.trust-copy > p.small {
+  color: var(--text-on-dark);
+  font-size: 14px;
+  line-height: 1.47;
+}
+.trust-copy .badge {
+  color: var(--on-dark);
+  background: #424245;
+}
+.trust-copy .badge-positive {
+  color: var(--on-dark);
+  background: #424245;
+}
+.trust-copy .badge-negative {
+  color: #ffb4ac;
+  background: #382523;
+}
+.faq-list summary {
+  font-size: 17px;
+  font-weight: 600;
+}
+.faq-list p {
+  font-size: 17px;
+  line-height: 1.47;
+}
+.final-cta {
+  background: var(--soft);
+  color: var(--ink);
+  border-radius: var(--radius-card);
+}
+.final-cta .button {
+  background: transparent;
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+}
+.site-footer .brand,
+.site-footer .brand-second,
+.site-footer .brand > svg {
+  color: var(--on-dark);
+}
+.site-footer p,
+.site-footer .footer-inner > div {
+  font-size: 12px;
+  color: var(--text-on-dark);
+}
+.site-footer a {
+  min-height: 44px;
+}
+
+/* Restore the workspace's navigation rail and content bounds. */
+.app-frame {
+  grid-template-columns: 216px minmax(0, 1fr);
+}
+.app-body {
+  background: var(--canvas);
+}
+.workspace-main {
+  max-width: 1180px;
+  padding: 47px 48px 100px;
+}
+.sidebar .brand {
+  white-space: normal;
+  align-items: flex-start;
+}
+.sidebar .brand > span {
+  font-size: 17px;
+  line-height: 1.24;
+}
+.sidebar .brand > svg {
+  width: 25px;
+  height: 25px;
+}
+.sidebar-campus {
+  font-size: 12px;
+  padding-left: 37px;
+}
+.sidebar-link {
+  font-size: 14px;
+  border-radius: var(--radius-control);
+}
+.sidebar-link.active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.sidebar-bottom > a {
+  font-size: 12px;
+  line-height: 1.47;
+}
+.local-status {
+  gap: 7px;
+}
+.local-status strong {
+  font-size: 12px;
+}
+.local-status small {
+  font-size: 10px;
+}
+.local-status .icon-button {
+  width: 36px;
+  min-width: 36px;
+}
+.app-topbar {
+  font-size: 12px;
+  padding-inline: 40px;
+}
+.collection-label {
+  font-size: 12px;
+}
+.search-section,
+.collection-notice {
+  max-width: 740px;
+}
+.compare-tray {
+  left: calc(50% + 108px);
+}
+.research-card h2 {
+  overflow-wrap: anywhere;
+}
+.card-actions {
+  flex-wrap: wrap;
+}
+.card-actions > .button {
+  white-space: normal;
+  text-align: left;
+}
+.mail-layout {
+  grid-template-columns: 185px minmax(0, 1fr);
+}
+
+@media (min-width: 1450px) {
+  .workspace-main {
+    padding-top: 60px;
+  }
+}
+@media (max-width: 1199px) {
+  .header-inner {
+    gap: 20px;
+  }
+  .landing-nav {
+    gap: 18px;
+  }
+  .landing-nav a {
+    font-size: 12px;
+  }
+  .app-frame {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .workspace-main {
+    padding-inline: 32px;
+  }
+  .compare-tray {
+    left: calc(50% + 100px);
+  }
+  .mail-layout {
+    grid-template-columns: 165px minmax(0, 1fr);
+    padding: 20px;
+    gap: 20px;
+  }
+}
+@media (max-width: 1068px) {
+  .mail-layout {
+    grid-template-columns: 1fr;
+  }
+  .hero h1 {
+    font-size: 40px;
+  }
+  .preview-research h2 {
+    font-size: 28px;
+  }
+}
+@media (max-width: 1023px) {
+  .header-actions .mobile-menu {
+    display: inline-flex;
+  }
+  .landing-nav.is-open {
+    position: absolute;
+    display: flex;
+    top: 84px;
+    left: 0;
+    right: 0;
+    padding: 24px;
+    flex-direction: column;
+    gap: 0;
+    background: var(--canvas);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .landing-nav.is-open a {
+    min-height: 48px;
+    width: 100%;
+    justify-content: center;
+    font-size: 17px;
+  }
+  .how-heading h2,
+  .trust-inner h2,
+  .faq-section > h2,
+  .final-cta h2 {
+    font-size: 34px;
+  }
+  .principles-strip span {
+    font-size: 12px;
+  }
+  .mail-layout {
+    grid-template-columns: 1fr;
+  }
+  .comparison-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 767px) {
+  .app-frame {
+    display: block;
+  }
+  .header-inner {
+    gap: 8px;
+  }
+  .header-inner .brand {
+    gap: 6px;
+  }
+  .header-inner .brand > span {
+    font-size: 17px;
+  }
+  .header-actions > .button {
+    font-size: 12px;
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+  .header-actions {
+    gap: 0;
+  }
+  .header-actions .icon-button {
+    width: 36px;
+    min-width: 36px;
+  }
+  .landing-nav.is-open {
+    top: 74px;
+    box-shadow: none;
+  }
+  .hero {
+    gap: 36px;
+  }
+  .hero h1 {
+    font-size: 40px;
+    line-height: 1.1;
+    letter-spacing: -0.374px;
+  }
+  .hero .eyebrow {
+    font-size: 12px;
+    margin-bottom: 20px;
+  }
+  .hero-description {
+    font-size: 17px;
+    max-width: 440px;
+  }
+  .hero-preview {
+    padding: 20px;
+  }
+  .preview-research {
+    padding: 24px;
+  }
+  .preview-research h2 {
+    font-size: 28px;
+  }
+  .preview-research > p:not(.preview-dept) {
+    font-size: 14px;
+  }
+  .hero-actions {
+    gap: 14px;
+  }
+  .hero-actions .button,
+  .hero-actions .quiet-link {
+    font-size: 14px;
+  }
+  .principles-strip span {
+    font-size: 14px;
+  }
+  .how-heading h2,
+  .trust-inner h2,
+  .faq-section > h2,
+  .final-cta h2 {
+    font-size: 28px;
+  }
+  .steps h3 {
+    font-size: 21px;
+  }
+  .steps p,
+  .faq-list summary,
+  .faq-list p {
+    font-size: 17px;
+  }
+  .sidebar .brand {
+    align-items: center;
+  }
+  .sidebar .brand > span {
+    font-size: 21px;
+  }
+  .sidebar-link {
+    font-size: 12px;
+    min-height: 44px;
+  }
+  .local-status .icon-button {
+    width: 44px;
+    min-width: 44px;
+  }
+  .app-topbar {
+    font-size: 12px;
+    padding-inline: 20px;
+  }
+  .workspace-main {
+    padding: 31px 20px 105px;
+  }
+  .compare-tray {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: calc(100% - 24px);
+    max-width: 440px;
+  }
+  .mail-layout {
+    padding: 16px;
+  }
+}
+@media (max-width: 419px) {
+  .header-inner .brand > span {
+    max-width: 90px;
+    white-space: normal;
+    font-size: 16px;
+  }
+  .header-inner .brand > svg {
+    width: 24px;
+  }
+  .hero h1 {
+    font-size: 34px;
+  }
+  .preview-heading {
+    font-size: 11px;
+  }
+  .preview-research {
+    padding: 20px;
+  }
+  .preview-research h2 {
+    font-size: 24px;
+  }
+  .preview-research .badge {
+    font-size: 11px;
+  }
+  .preview-caption,
+  .preview-footer > span {
+    font-size: 11px;
+  }
+}
