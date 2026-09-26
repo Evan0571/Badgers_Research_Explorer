@@ -10,11 +10,12 @@ export default function Icon() {
         justifyContent: "center",
         width: "100%",
         height: "100%",
-        background: "#faf9f5",
-        color: "#a9583e",
+        background: "#f5f5f7",
+        color: "#0066cc",
         fontSize: 27,
-        fontFamily: "serif",
-        borderRadius: 7,
+        fontFamily: "sans-serif",
+        fontWeight: 600,
+        borderRadius: 8,
       }}
     >
       R

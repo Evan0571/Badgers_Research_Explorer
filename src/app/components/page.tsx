@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { AppleHeader } from "@/components/apple-header";
 import {
   ArrowRight,
   BookmarkSimple,
@@ -9,50 +10,39 @@ import {
 } from "@phosphor-icons/react";
 import {
   Badge,
-  Brand,
   Button,
   Dialog,
   EmptyState,
   Field,
   IconButton,
-  LinkButton,
   Notice,
   Select,
   Textarea,
-  ThemeToggle,
 } from "@/components/ui";
 export default function ComponentsPage() {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   return (
     <>
-      <header className="container library-header">
-        <Brand />
-        <div className="row">
-          <ThemeToggle />
-          <LinkButton href="/explore" variant="secondary">
-            Open workspace <ArrowRight size={17} />
-          </LinkButton>
-        </div>
-      </header>
+      <AppleHeader />
       <main id="main" className="container library-main">
         <p className="eyebrow">Research Explorer design system</p>
-        <h1>Warm, clear, considered.</h1>
+        <h1>Simple. Clear. Considered.</h1>
         <p>
-          A small, reusable component library based on the Claude design
-          analysis. Editorial typography, warm surfaces, accessible controls,
+          A small, reusable component library based on the Apple design
+          analysis. System typography, neutral surfaces, blue capsule actions,
           and honest states.
         </p>
         <section className="library-section">
           <h2>The foundations</h2>
           <div className="swatches">
             {[
-              ["Canvas", "--canvas", "#faf9f5"],
-              ["Soft", "--soft", "#f5f0e8"],
-              ["Card", "--card", "#efe9de"],
-              ["Ink", "--ink", "#141413"],
-              ["Coral", "--accent", "#cc785c"],
-              ["Action", "--action", "#a9583e"],
+              ["Canvas", "--canvas", "#ffffff"],
+              ["Soft", "--soft", "#f5f5f7"],
+              ["Card", "--card", "#fafafc"],
+              ["Ink", "--ink", "#1d1d1f"],
+              ["Action blue", "--accent", "#0066cc"],
+              ["Action", "--action", "#0066cc"],
             ].map(([label, token, hex]) => (
               <div key={token}>
                 <div
@@ -71,15 +61,15 @@ export default function ComponentsPage() {
           <h2>Typography</h2>
           <div className="type-example">
             <h1>Start with curiosity.</h1>
-            <span>EB Garamond · Display · 48 / 400</span>
+            <span>System / Inter · Display · 56 / 600</span>
           </div>
           <div className="type-example">
             <h2>A question worth asking.</h2>
-            <span>EB Garamond · Heading · 36 / 400</span>
+            <span>System / Inter · Heading · 40 / 600</span>
           </div>
           <div className="type-example">
             <p>Plain-language explanations. Sources you can check.</p>
-            <span>Inter · Body · 15 / 400</span>
+            <span>System / Inter · Body · 17 / 400</span>
           </div>
         </section>
         <section className="library-section">
@@ -168,14 +158,14 @@ export default function ComponentsPage() {
           Reference:{" "}
           <a
             className="quiet-link"
-            href="https://getdesign.md/claude/design-md"
+            href="https://getdesign.md/apple/design-md"
             target="_blank"
             rel="noreferrer"
           >
-            VoltAgent’s independent Claude design analysis
+            VoltAgent’s independent Apple design analysis
           </a>
-          . Original branding and component implementation for Research
-          Explorer.
+          . Reference-based web components for Research Explorer. An independent
+          preview, not an official Apple component library.
         </p>
         <Dialog
           open={open}

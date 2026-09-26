@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "./apple.css";
 import { WorkspaceProvider } from "@/components/explorer/provider";
 const inter = localFont({
   src: [
@@ -21,17 +22,10 @@ const inter = localFont({
   display: "swap",
   adjustFontFallback: "Arial",
 });
-const garamond = localFont({
-  src: "../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2",
-  variable: "--font-garamond",
-  display: "swap",
-  weight: "400",
-  adjustFontFallback: "Times New Roman",
-});
 export const metadata: Metadata = {
   title: {
-    default: "Research Explorer | Start with curiosity",
-    template: "%s | Research Explorer",
+    default: "Research Explorer | Apple style preview",
+    template: "%s | Research Explorer · Apple preview",
   },
   description:
     "Explore research at UW-Madison. Understand the work, compare your options, and prepare your next step.",
@@ -42,7 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${garamond.variable}`}
+      className={inter.variable}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >

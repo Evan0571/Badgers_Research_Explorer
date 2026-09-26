@@ -285,7 +285,7 @@ export function ThemeToggle() {
       try {
         saved = localStorage.getItem("research-theme");
       } catch {}
-      const next = saved ? saved === "dark" : query.matches;
+      const next = saved === "dark";
       setDark(next);
       document.documentElement.dataset.theme = next ? "dark" : "light";
     };

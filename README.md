@@ -1,8 +1,10 @@
-# UW Research Explorer
+# UW Research Explorer · Apple 风格对照版
 
 BuildFest 黑客松项目：帮助 UW-Madison 学生从兴趣开始，理解、比较校内研究，并准备联系材料。
 
-当前已实现首版组件库和可运行的前端流程：介绍首页、兴趣输入、有限资料集检索、研究详情、收藏、比较、逐封邮件草稿、个性化、附件和发送预览。视觉依据 [Claude DESIGN.md](https://getdesign.md/claude/design-md)，项目规范见 [DESIGN.md](DESIGN.md)。
+当前已实现首版组件库和可运行的前端流程：介绍首页、兴趣输入、有限资料集检索、研究详情、收藏、比较、逐封邮件草稿、个性化、附件和发送预览。本分支视觉依据 [Apple DESIGN.md](https://getdesign.md/apple/design-md)，规范见 [DESIGN.md](DESIGN.md)。这是第三方设计分析的实现，不是 Apple 官方组件包。
+
+Claude 版本原样保留在原项目目录，Git 标签为 `claude-preview-2026-09-26`。两版来源、对应关系和运行方式见 [Apple 对照版说明](docs/APPLE-PREVIEW.md)。
 
 **能力边界：** 当前只检索 4 位真实教授的公开来源快照，不是全校实时检索；草稿使用本地模板，不调用 AI；UW 邮箱验证码、Microsoft 365 授权和真实发送尚未实现。发送按钮禁用，接口返回 503，不伪造授权或发送状态。完整 P0 范围保留在 PRD 中。
 
@@ -12,16 +14,16 @@ BuildFest 黑客松项目：帮助 UW-Madison 学生从兴趣开始，理解、�
 
 ```bash
 npm install
-npm run dev
+npm run dev -- --port 3002
 ```
 
-打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。组件库在 [/components](http://127.0.0.1:3000/components)，工作区在 [/explore](http://127.0.0.1:3000/explore)。当前版本不需要任何 API key。
+打开 [Apple 预览](http://127.0.0.1:3002)。组件库在 [/components](http://127.0.0.1:3002/components)，工作区在 [/explore](http://127.0.0.1:3002/explore)。[Claude 原版](http://127.0.0.1:3000)使用独立目录与端口。当前版本不需要任何 API key。
 
 ```bash
 npm run typecheck
 npm test
 npm run build
-npm start
+npm run start -- --port 3002
 ```
 
 ## 技术与目录
