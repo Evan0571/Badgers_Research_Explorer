@@ -5,7 +5,7 @@ import {
   EnvelopeSimple,
   Scales,
 } from "@phosphor-icons/react";
-import { byId } from "@/data/researchers";
+import { researcherById } from "@/lib/catalog";
 import { canEmail } from "@/lib/research";
 import {
   Badge,
@@ -24,8 +24,8 @@ export function ResearcherDialog({
   id: string | null;
   onClose: () => void;
 }) {
-  const r = id ? byId(id) : undefined;
   const { workspace, setWorkspace } = useWorkspace();
+  const r = id ? researcherById(workspace, id) : undefined;
   const { toggleSave, toggleCompare, prepareDrafts } = useResearchActions();
   if (!r) return null;
   return (
@@ -42,6 +42,15 @@ export function ResearcherDialog({
         <p className="detail-lead">
           {/[\u3400-\u9fff]/.test(workspace.query) ? r.summaryZh : r.summary}
         </p>
+        {r.relevance && (
+          <Notice title="Connection to your interests">{r.relevance}</Notice>
+        )}
+        {r.provenance !== "live" && (
+          <Notice>
+            This is a preserved preview example. Run a live search to check
+            current information before preparing contact.
+          </Notice>
+        )}
         <div className="row wrap">
           <Button variant="secondary" onClick={() => toggleSave(r.id)}>
             <BookmarkSimple
@@ -105,6 +114,11 @@ export function ResearcherDialog({
                       </Badge>
                     </div>
                     <p>{condition.detail}</p>
+                    {condition.quote && (
+                      <p className="small">
+                        Source evidence: “{condition.quote}”
+                      </p>
+                    )}
                   </div>
                 ),
             )}
@@ -144,7 +158,11 @@ export function ResearcherDialog({
                   <ArrowUpRight size={16} />
                 </a>
                 <p>{s.note}</p>
-                <small>Checked {s.checkedAt} · Public-source snapshot</small>
+                {s.excerpt && <p className="small">“{s.excerpt}”</p>}
+                <small>
+                  Checked {new Date(s.checkedAt).toLocaleDateString()} ·
+                  Public-source snapshot
+                </small>
               </div>
             ))}
           </div>

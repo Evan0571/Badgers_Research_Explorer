@@ -1,14 +1,9 @@
 import { z } from "zod";
 import { emptyWorkspace } from "./research";
 import type { Workspace } from "./types";
+import { researcherSchema, searchResultSchema } from "./contracts";
 export const STORAGE_KEY = "uw-research-explorer:guest:v1";
-const topic = z.enum([
-  "learning",
-  "agents",
-  "robotics",
-  "accessibility",
-  "machine-learning",
-]);
+const topic = z.string().max(120);
 const schema = z.object({
   version: z.literal(1),
   query: z.string().max(10000),
@@ -29,6 +24,8 @@ const schema = z.object({
     resumeText: z.string(),
   }),
   selectedDrafts: z.array(z.string()).default([]),
+  catalog: z.array(researcherSchema).optional(),
+  search: searchResultSchema.optional(),
   drafts: z.array(
     z.object({
       id: z.string(),
@@ -38,6 +35,7 @@ const schema = z.object({
       body: z.string(),
       recipientEdited: z.boolean(),
       updatedAt: z.string(),
+      generation: z.enum(["ai", "local-template"]).optional(),
       answers: z.object({
         interest: z.string(),
         experience: z.string(),

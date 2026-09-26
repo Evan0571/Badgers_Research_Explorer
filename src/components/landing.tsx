@@ -224,9 +224,9 @@ export default function Landing() {
                 <Badge>Not stated</Badge>
               </div>
               <p className="small">
-                This first build includes a small, source-checked collection.
-                Live campus-wide discovery and school email connection are still
-                being developed.
+                This example shows how public research sources become readable
+                introductions. Live campus-wide discovery and school email
+                connection are still being developed.
               </p>
             </div>
           </div>
@@ -241,7 +241,7 @@ export default function Landing() {
               ],
               [
                 "Can I explore outside my major?",
-                "Yes. Research often crosses departments. The collection is organized around interests, and your major does not restrict what you can explore. This first build does not yet provide a complete campus search.",
+                "Yes. Research often crosses departments. Search follows your stated interests across UW public sources. It returns a limited set of source-backed matches, not an exhaustive campus directory.",
               ],
               [
                 "Does a recommendation mean a lab is hiring?",
@@ -249,7 +249,7 @@ export default function Landing() {
               ],
               [
                 "Can this send emails from my school account?",
-                "Email drafting and preview are available. UW Microsoft 365 verification and sending are not connected in this build. No message is sent, and no connection or delivery status is simulated.",
+                "You can edit and preview each message before sending. Email verification uses a code sent to your UW address, with no school sign-in redirect. Sending is available only when an email service is configured, and the preview shows the actual sender and reply address.",
               ],
               [
                 "Where is my work saved?",

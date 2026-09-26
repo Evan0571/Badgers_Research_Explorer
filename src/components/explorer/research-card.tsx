@@ -53,7 +53,14 @@ export function ResearchCard({
               ? "Applications open"
               : "Openings not stated"}
         </Badge>
-        <span className="small muted">Credit: not stated</span>
+        <span className="small muted">
+          Credit:{" "}
+          {r.credit.value === "supported"
+            ? "supported"
+            : r.credit.value === "not-supported"
+              ? "not supported"
+              : "not stated"}
+        </span>
       </div>
       <div className="card-reason">
         <span>Why explore this</span>
@@ -61,7 +68,7 @@ export function ResearchCard({
           {r.topics.filter((t) => workspace.topics.includes(t)).length > 1
             ? "Connects more than one of your selected interests. "
             : ""}
-          {r.question}
+          {r.relevance || r.question}
         </p>
       </div>
       <footer className="card-actions">

@@ -1,5 +1,7 @@
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
+import { checkOrigin, failure, readBody } from "@/server/http";
+import { session, rateLimit } from "@/server/security";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "no-store" };
@@ -9,7 +11,13 @@ export async function POST(request: Request) {
       { status: 413, headers },
     );
   try {
-    const form = await request.formData();
+    checkOrigin(request);
+    const user = await session();
+    rateLimit(`extract:${user.id}`, 15, 3600000);
+    const bytes = await readBody(request, 11 * 1024 * 1024);
+    const form = await new Response(new Uint8Array(bytes), {
+      headers: { "Content-Type": request.headers.get("content-type") || "" },
+    }).formData();
     const file = form.get("file");
     if (!(file instanceof File))
       return Response.json(
@@ -72,7 +80,8 @@ export async function POST(request: Request) {
       { text: text.trim(), mode: "text-extraction", retainedFile: false },
       { headers },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && "status" in error) return failure(error);
     return Response.json(
       {
         error:

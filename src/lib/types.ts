@@ -1,8 +1,7 @@
 export type ConditionValue = "supported" | "not-supported" | "unknown";
 export type Recruitment = "open" | "closed" | "unknown";
 export type ContactRoute = "email" | "form" | "program" | "website" | "closed";
-export type Topic =
-  "learning" | "agents" | "robotics" | "accessibility" | "machine-learning";
+export type Topic = string;
 export interface Source {
   id: string;
   title: string;
@@ -10,11 +9,13 @@ export interface Source {
   note: string;
   checkedAt: string;
   status: "checked" | "unavailable";
+  excerpt?: string;
 }
 export interface Condition {
   value: ConditionValue;
   detail: string;
   sourceId?: string;
+  quote?: string;
 }
 export interface Researcher {
   id: string;
@@ -42,6 +43,8 @@ export interface Researcher {
     sourceId: string;
   };
   sources: Source[];
+  relevance?: string;
+  provenance?: "live" | "sample";
 }
 export interface Background {
   name: string;
@@ -60,6 +63,7 @@ export interface Draft {
   updatedAt: string;
   answers: { interest: string; experience: string; request: string };
   attachments?: { id: string; name: string; size: number; type: string }[];
+  generation?: "ai" | "local-template";
 }
 export type DeliveryState =
   "queued" | "submitting" | "accepted" | "failed" | "unknown" | "cancelled";
@@ -87,4 +91,6 @@ export interface Workspace {
   background: Background;
   drafts: Draft[];
   selectedDrafts: string[];
+  catalog?: Researcher[];
+  search?: import("./contracts").SearchResult;
 }

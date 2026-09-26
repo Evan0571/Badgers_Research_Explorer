@@ -1,3 +1,5 @@
+> Historical frontend baseline below. Current backend implementation, configuration requirements, and user decisions are documented in [BACKEND.md](BACKEND.md). The four-record local search, local-only generation, and Microsoft authorization descriptions below describe the earlier build, not the current backend.
+
 # Implementation status
 
 Date: 2026-09-26. This is the first functional frontend and component-library implementation, not completion of every PRD P0 requirement. The earlier document-only boundary in BRD/PRD is superseded by the user's explicit request to start development. Original requirements are preserved.
@@ -21,17 +23,17 @@ Node.js 22.13+ or 24; npm install, npm run dev. Production: npm run build then n
 
 ## External integrations and remaining P0 work
 
-| Area | Status | Next implementation and verification |
-|---|---|---|
-| Campus-wide discovery | Not implemented | Choose search provider, source fetch/identity resolution, per-fact evidence and coverage reporting; verify cross-domain university-linked profiles. Do not silently fall back to the starter collection. |
-| Model explanations and generation | Not implemented | Provider adapter, source-constrained structured output, untrusted source handling, individual generation failure/retry and user-edit versioning. Current drafts are labeled local templates. |
-| Résumé understanding | Partial | Text extraction works; user review/interest selection is manual. Add optional proposed background fields with explicit confirmation. No invented skills. |
-| UW email identity | Not implemented | Send actual verification code to a UW school mailbox, server-side expiring challenge, attempt limits, verified identity bound to Microsoft identity. Resolve allowed alias domains with UW policies. |
-| Microsoft 365 authorization | Not implemented | Register app, minimal delegated Mail.Send permissions, OAuth/OIDC with state and PKCE, server-side token store and secure session, verify tenant account policy. No secrets in browser persistence. |
-| Real batch sending | Not implemented | Durable database transaction for immutable per-message snapshots, account scoping, idempotency and reconciliation. Mark 202 as accepted, not delivered. Timeout must become unknown and must not be blindly retried. Test only with authorized team mailboxes. |
-| Contact history | UI empty state | Populate only from actual submissions; manual progress and cancellation/retry still needed. |
-| Source freshness | Manual snapshot | Revalidate recruitment and contact route before sending; expired/conflicting/unavailable evidence cannot become affirmative conditions. |
-| Production hardening | Pending | Server-side streaming upload limits, rate limits, attachment lifecycle/quotas, account separation, session revocation, telemetry without résumé or message bodies, security review. Local preview binds to loopback. |
+| Area                              | Status          | Next implementation and verification                                                                                                                                                                                                                           |
+| --------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Campus-wide discovery             | Not implemented | Choose search provider, source fetch/identity resolution, per-fact evidence and coverage reporting; verify cross-domain university-linked profiles. Do not silently fall back to the starter collection.                                                       |
+| Model explanations and generation | Not implemented | Provider adapter, source-constrained structured output, untrusted source handling, individual generation failure/retry and user-edit versioning. Current drafts are labeled local templates.                                                                   |
+| Résumé understanding              | Partial         | Text extraction works; user review/interest selection is manual. Add optional proposed background fields with explicit confirmation. No invented skills.                                                                                                       |
+| UW email identity                 | Not implemented | Send actual verification code to a UW school mailbox, server-side expiring challenge, attempt limits, verified identity bound to Microsoft identity. Resolve allowed alias domains with UW policies.                                                           |
+| Microsoft 365 authorization       | Not implemented | Register app, minimal delegated Mail.Send permissions, OAuth/OIDC with state and PKCE, server-side token store and secure session, verify tenant account policy. No secrets in browser persistence.                                                            |
+| Real batch sending                | Not implemented | Durable database transaction for immutable per-message snapshots, account scoping, idempotency and reconciliation. Mark 202 as accepted, not delivered. Timeout must become unknown and must not be blindly retried. Test only with authorized team mailboxes. |
+| Contact history                   | UI empty state  | Populate only from actual submissions; manual progress and cancellation/retry still needed.                                                                                                                                                                    |
+| Source freshness                  | Manual snapshot | Revalidate recruitment and contact route before sending; expired/conflicting/unavailable evidence cannot become affirmative conditions.                                                                                                                        |
+| Production hardening              | Pending         | Server-side streaming upload limits, rate limits, attachment lifecycle/quotas, account separation, session revocation, telemetry without résumé or message bodies, security review. Local preview binds to loopback.                                           |
 
 `GET /api/capabilities` reports truthful capability flags. `POST /api/mail/send` fails closed with 503. Setting an environment variable cannot falsely enable sending. No credentials or account registration were requested or created by this implementation.
 

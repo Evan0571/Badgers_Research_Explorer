@@ -13,8 +13,7 @@ import {
   BookOpen,
   ArrowCounterClockwise,
 } from "@phosphor-icons/react";
-import { researchers, topics } from "@/data/researchers";
-import { findResearchers, inferTopics, isBroadQuery } from "@/lib/research";
+import { ResumeReview } from "./resume-review";
 import {
   Badge,
   Button,
@@ -30,7 +29,7 @@ import { ResearchCard } from "./research-card";
 import { ResearcherDialog } from "./researcher-dialog";
 
 export function SearchView() {
-  const { workspace: w, setWorkspace, notify } = useWorkspace();
+  const { workspace: w, setWorkspace, notify, jobs } = useWorkspace();
   const [input, setInput] = useState(w.query);
   const [detail, setDetail] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -38,25 +37,25 @@ export function SearchView() {
   const fileRef = useRef<HTMLInputElement>(null);
   const params = useSearchParams();
   useEffect(() => {
+    if (w.search) setInput(w.search.query);
+  }, [w.search?.id]);
+  useEffect(() => {
     if (params.get("researcher")) setDetail(params.get("researcher"));
   }, [params]);
   const submit = (query: string) => {
-    if (!query.trim()) return;
+    if (!query.trim() || jobs.searchStage) return;
     setInput(query);
-    setWorkspace((p) => ({
-      ...p,
-      query: query.trim(),
-      searched: true,
-      topics: inferTopics(query),
-      department: "",
-      recruitment: "",
-      creditOnly: false,
-      matchAll: false,
-    }));
+    void jobs.search(query);
   };
-  const found = w.searched
-    ? findResearchers(researchers, w.query, w.topics, w.matchAll)
-    : [];
+  const researchers = w.search?.researchers || [];
+  const topics = w.search?.directions || [];
+  const found = researchers.filter(
+    (r) =>
+      !w.topics.length ||
+      (w.matchAll
+        ? w.topics.every((t) => r.topics.includes(t))
+        : w.topics.some((t) => r.topics.includes(t))),
+  );
   const filtered = found.filter(
     (r) =>
       (!w.department || r.department === w.department) &&
@@ -133,7 +132,8 @@ export function SearchView() {
           </label>
           <textarea
             id="interest"
-            maxLength={10000}
+            disabled={!!jobs.searchStage}
+            maxLength={3000}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="I’m interested in AI and how people learn…"
@@ -142,15 +142,19 @@ export function SearchView() {
           <div className="composer-footer">
             <Button
               variant="ghost"
-              disabled={uploading}
+              disabled={uploading || !!jobs.searchStage}
               onClick={() => fileRef.current?.click()}
             >
               <Paperclip size={19} />
               {uploading ? "Reading résumé…" : "Add résumé"}
               <span className="optional-label">optional</span>
             </Button>
-            <Button type="submit" disabled={!input.trim()}>
-              Explore research <ArrowRight size={18} />
+            <Button
+              type="submit"
+              disabled={!input.trim() || !!jobs.searchStage}
+            >
+              {jobs.searchStage ? "Searching…" : "Explore research"}{" "}
+              <ArrowRight size={18} />
             </Button>
           </div>
         </form>
@@ -167,6 +171,17 @@ export function SearchView() {
           English or 中文. Your interests lead; your major does not limit the
           search.
         </p>
+        {jobs.searchStage && (
+          <Notice>
+            {jobs.searchStage}… You can leave this page and return while the
+            request runs.
+          </Notice>
+        )}
+        {jobs.searchError && (
+          <Notice tone="error">
+            {jobs.searchError} Previous successful results remain below.
+          </Notice>
+        )}
         {uploadError && (
           <Notice tone="error">
             {uploadError} You can paste résumé text in optional background.
@@ -238,6 +253,20 @@ export function SearchView() {
               }))
             }
           />
+          <ResumeReview onInterest={setInput} />
+          <Textarea
+            id="confirmed-experience"
+            label="Experience you want to mention"
+            hint="Only information you confirm here is used in email drafts."
+            rows={3}
+            value={w.background.experience}
+            onChange={(e) =>
+              setWorkspace((p) => ({
+                ...p,
+                background: { ...p.background, experience: e.target.value },
+              }))
+            }
+          />
           {w.background.resumeText && (
             <Button
               variant="ghost"
@@ -253,13 +282,17 @@ export function SearchView() {
           )}
         </details>
       </div>
-      {!w.searched && (
+      {!w.search && (
         <>
           <div className="starter-suggestions">
             <span>Try a starting point</span>
             {["AI", "Robotics", "Accessibility", "AI and education"].map(
               (s) => (
-                <button key={s} onClick={() => submit(s)}>
+                <button
+                  key={s}
+                  disabled={!!jobs.searchStage}
+                  onClick={() => submit(s)}
+                >
                   {s}
                   <ArrowUpRight size={14} />
                 </button>
@@ -274,8 +307,8 @@ export function SearchView() {
               We help you explore it.
             </h2>
             <p>
-              Start with the source-checked collection, then save and compare
-              research that catches your attention.
+              Explore public UW research sources, then save and compare research
+              that catches your attention.
             </p>
           </div>
         </>
@@ -283,18 +316,37 @@ export function SearchView() {
       <div className="collection-notice">
         <BookOpen size={17} />
         <p>
-          <strong>About this collection.</strong> {researchers.length} real UW
-          researchers, sources checked September 26, 2026. This build searches
-          these records only. Campus-wide discovery is not connected yet.
+          {w.search ? (
+            <>
+              <strong>
+                {w.search.cached
+                  ? "Cached source review."
+                  : "Sources reviewed."}
+              </strong>{" "}
+              {w.search.interpretation} Checked{" "}
+              {new Date(w.search.checkedAt).toLocaleDateString()}. Results cover
+              the sources found for this query, not every UW researcher.
+            </>
+          ) : (
+            <>
+              <strong>Across UW-Madison.</strong> Search public university and
+              linked lab pages across departments. Results are checked against
+              retrieved sources; a research interest does not imply an open
+              position.
+            </>
+          )}
         </p>
       </div>
-      {w.searched && (
+      {w.search && (
         <>
-          {(isBroadQuery(w.query) || w.topics.length > 1) && (
+          {w.search.warnings.map((warning, i) => (
+            <Notice key={i}>{warning}</Notice>
+          ))}
+          {topics.length > 1 && (
             <section className="directions-section">
               <div className="row between">
                 <h2>
-                  {isBroadQuery(w.query)
+                  {w.search.broad
                     ? "A few directions to explore"
                     : "Your interests can overlap"}
                 </h2>
@@ -309,40 +361,34 @@ export function SearchView() {
                 </Button>
               </div>
               <div className="direction-grid">
-                {topics
-                  .filter(
-                    (t) =>
-                      isBroadQuery(w.query) ||
-                      inferTopics(w.query).includes(t.id),
-                  )
-                  .map((t) => (
-                    <button
-                      className={
-                        w.topics.includes(t.id)
-                          ? "direction-card selected"
-                          : "direction-card"
-                      }
-                      key={t.id}
-                      aria-pressed={w.topics.includes(t.id)}
-                      onClick={() =>
-                        setWorkspace((p) => ({
-                          ...p,
-                          topics: p.topics.includes(t.id)
-                            ? p.topics.filter((x) => x !== t.id)
-                            : [...p.topics, t.id],
-                        }))
-                      }
-                    >
-                      <span>
-                        {t.title}
-                        <ArrowUpRight size={16} />
-                      </span>
-                      <p>{t.question}</p>
-                      <small>
-                        {researchers.find((r) => r.topics.includes(t.id))?.name}
-                      </small>
-                    </button>
-                  ))}
+                {topics.map((t) => (
+                  <button
+                    className={
+                      w.topics.includes(t.id)
+                        ? "direction-card selected"
+                        : "direction-card"
+                    }
+                    key={t.id}
+                    aria-pressed={w.topics.includes(t.id)}
+                    onClick={() =>
+                      setWorkspace((p) => ({
+                        ...p,
+                        topics: p.topics.includes(t.id)
+                          ? p.topics.filter((x) => x !== t.id)
+                          : [...p.topics, t.id],
+                      }))
+                    }
+                  >
+                    <span>
+                      {t.title}
+                      <ArrowUpRight size={16} />
+                    </span>
+                    <p>{t.question}</p>
+                    <small>
+                      {researchers.find((r) => r.topics.includes(t.id))?.name}
+                    </small>
+                  </button>
+                ))}
               </div>
               {w.topics.length > 1 && (
                 <label className="checkbox-label">
@@ -368,7 +414,7 @@ export function SearchView() {
                 <p>
                   <strong>{filtered.length}</strong>{" "}
                   {filtered.length === 1 ? "researcher" : "researchers"} in the
-                  collection ·{" "}
+                  results ·{" "}
                   {w.topics.length
                     ? topics
                         .filter((t) => w.topics.includes(t.id))
@@ -377,7 +423,7 @@ export function SearchView() {
                     : w.query}
                 </p>
               </div>
-              <Badge>No ranking or match scores</Badge>
+              <Badge>Source-backed results</Badge>
             </div>
             <div className="filter-bar">
               <SlidersHorizontal size={20} />
@@ -452,10 +498,14 @@ export function SearchView() {
             ) : (
               <EmptyState
                 icon={<MagnifyingGlass size={32} />}
-                title="No matches in this collection"
+                title="No verified matches for these filters"
                 action={
-                  <Button variant="secondary" onClick={() => submit("AI")}>
-                    Explore the starter collection
+                  <Button
+                    variant="secondary"
+                    disabled={!!jobs.searchStage}
+                    onClick={() => submit(input)}
+                  >
+                    Search again
                   </Button>
                 }
               >

@@ -11,12 +11,14 @@ import {
 import { emptyWorkspace } from "@/lib/research";
 import { parseWorkspace, STORAGE_KEY } from "@/lib/storage";
 import type { Workspace } from "@/lib/types";
+import { useBackendJobs } from "./use-backend-jobs";
 const Context = createContext<{
   workspace: Workspace;
   setWorkspace: Dispatch<SetStateAction<Workspace>>;
   ready: boolean;
   storageError: string;
   notify: (s: string) => void;
+  jobs: ReturnType<typeof useBackendJobs>;
 } | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
@@ -24,6 +26,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [storageError, setStorageError] = useState("");
   const [blocked, setBlocked] = useState(false);
   const [toast, setToast] = useState("");
+  const jobs = useBackendJobs(ready && !blocked, setWorkspace);
   useEffect(() => {
     try {
       setWorkspace(parseWorkspace(localStorage.getItem(STORAGE_KEY)));
@@ -53,7 +56,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [toast]);
   return (
     <Context.Provider
-      value={{ workspace, setWorkspace, ready, storageError, notify: setToast }}
+      value={{
+        workspace,
+        setWorkspace,
+        ready,
+        storageError,
+        notify: setToast,
+        jobs,
+      }}
     >
       {children}
       <div

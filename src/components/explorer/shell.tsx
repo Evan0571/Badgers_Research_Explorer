@@ -14,7 +14,7 @@ import { Brand, Notice, ThemeToggle } from "@/components/ui";
 import { useWorkspace } from "./provider";
 export function ExplorerShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { workspace, ready, storageError } = useWorkspace();
+  const { workspace, ready, storageError, jobs } = useWorkspace();
   const navigation = [
     { href: "/explore", label: "Explore", icon: Compass, count: 0 },
     {
@@ -84,12 +84,14 @@ export function ExplorerShell({ children }: { children: React.ReactNode }) {
       <div className="app-body">
         <header className="app-topbar">
           <span>Your research, at your pace.</span>
-          <span className="collection-label">
-            Source-checked starter collection
-          </span>
+          <span className="collection-label">UW research exploration</span>
         </header>
         <main id="main" className="workspace-main">
           {storageError && <Notice tone="error">{storageError}</Notice>}
+          {jobs.draftStage && (
+            <Notice>{jobs.draftStage}… Existing drafts remain editable.</Notice>
+          )}
+          {jobs.draftError && <Notice tone="error">{jobs.draftError}</Notice>}
           {ready ? (
             children
           ) : (

@@ -5,7 +5,7 @@ import {
   ArrowRight,
   EnvelopeSimple,
 } from "@phosphor-icons/react";
-import { byId } from "@/data/researchers";
+import { researcherById } from "@/lib/catalog";
 import { canEmail } from "@/lib/research";
 import { Button, EmptyState, LinkButton, Notice } from "@/components/ui";
 import { useWorkspace } from "./provider";
@@ -17,7 +17,7 @@ export function SavedView() {
   const { prepareDrafts } = useResearchActions();
   const [detail, setDetail] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const saved = w.saved.map(byId).filter((r) => !!r);
+  const saved = w.saved.map((id) => researcherById(w, id)).filter((r) => !!r);
   const eligible = saved.filter(canEmail);
   return (
     <>

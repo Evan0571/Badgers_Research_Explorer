@@ -1,12 +1,22 @@
+import { config, integrationStatus } from "@/server/config";
+import { json } from "@/server/http";
+export const dynamic = "force-dynamic";
 export function GET() {
-  return Response.json({
-    search: { mode: "curated", liveCampusSearch: false },
-    resume: { textExtraction: true, ocr: false },
-    drafts: { mode: "local-template", aiGeneration: false },
+  const status = integrationStatus();
+  return json({
+    search: { mode: "live-source-review", liveCampusSearch: status.discovery },
+    resume: {
+      textExtraction: true,
+      aiSuggestions: status.generation,
+      ocr: false,
+    },
+    drafts: { mode: "ai", aiGeneration: status.generation },
     email: {
-      uwIdentityVerification: false,
+      uwIdentityVerification: status.verification,
       microsoft365Connected: false,
-      sendEnabled: false,
+      sendEnabled: status.sending,
+      transport: status.sending ? "platform" : null,
+      senderAddress: status.sending ? config().mailFrom : null,
     },
   });
 }

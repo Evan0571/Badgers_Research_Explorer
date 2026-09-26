@@ -1,11 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { byId } from "@/data/researchers";
-import { canEmail, makeDraft } from "@/lib/research";
+import { researcherById } from "@/lib/catalog";
+import { canEmail } from "@/lib/research";
 import { useWorkspace } from "./provider";
 import type { Researcher } from "@/lib/types";
 export function useResearchActions() {
-  const { workspace, setWorkspace, notify } = useWorkspace();
+  const { workspace, setWorkspace, notify, jobs } = useWorkspace();
   const router = useRouter();
   const toggleSave = (id: string) =>
     setWorkspace((w) => ({
@@ -31,9 +31,13 @@ export function useResearchActions() {
         : [...w.comparison, id],
     }));
   };
-  const prepareDrafts = (ids: string[]) => {
+  const prepareDrafts = async (ids: string[]) => {
+    if (jobs.draftStage) {
+      notify("Draft generation is already running.");
+      return;
+    }
     const eligible = [...new Set(ids)]
-      .map(byId)
+      .map((id) => researcherById(workspace, id))
       .filter((r): r is Researcher => !!r && canEmail(r));
     if (!eligible.length) {
       notify(
@@ -41,16 +45,20 @@ export function useResearchActions() {
       );
       return;
     }
-    setWorkspace((w) => ({
-      ...w,
-      drafts: [
-        ...w.drafts,
-        ...eligible
-          .filter((r) => !w.drafts.some((d) => d.researcherId === r.id))
-          .map((r) => makeDraft(r, w.background, w.query, crypto.randomUUID())),
-      ],
-    }));
+    const needed = eligible.filter(
+      (r) => !workspace.drafts.some((d) => d.researcherId === r.id),
+    );
+    if (needed.length > 6) {
+      notify("Generate up to six individual drafts at a time.");
+      return;
+    }
     router.push("/explore/mail");
+    if (needed.length)
+      await jobs.generate({
+        ids: needed.map((r) => r.id),
+        background: { ...workspace.background, resumeText: "" },
+        query: workspace.query,
+      });
   };
   return { toggleSave, toggleCompare, prepareDrafts };
 }

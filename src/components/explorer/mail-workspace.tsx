@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { get, set, del } from "idb-keyval";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   DownloadSimple,
@@ -11,10 +12,9 @@ import {
   X,
   Check,
   Copy,
-  UserCircle,
   ArrowUpRight,
 } from "@phosphor-icons/react";
-import { byId } from "@/data/researchers";
+import { researcherById } from "@/lib/catalog";
 import { draftIssues, normalizeRecipients, personalize } from "@/lib/research";
 import type { Draft } from "@/lib/types";
 import {
@@ -29,12 +29,17 @@ import {
   Textarea,
 } from "@/components/ui";
 import { useWorkspace } from "./provider";
+import { EmailVerification, type EmailIdentity } from "./email-verification";
+import { useMailSubmission } from "./use-mail-submission";
 
 export function MailWorkspace() {
   const { workspace: w, setWorkspace, notify } = useWorkspace();
+  const router = useRouter();
+  const submission = useMailSubmission();
+  const [senderName, setSenderName] = useState(w.background.name);
   const [activeId, setActiveId] = useState(w.drafts[0]?.id || "");
   const [preview, setPreview] = useState(false);
-  const [connection, setConnection] = useState(false);
+  const [identity, setIdentity] = useState<EmailIdentity | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [personalPreview, setPersonalPreview] = useState("");
   const [fileError, setFileError] = useState("");
@@ -42,7 +47,7 @@ export function MailWorkspace() {
   const [missing, setMissing] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = w.drafts.find((d) => d.id === activeId) || w.drafts[0];
-  const researcher = current && byId(current.researcherId);
+  const researcher = current && researcherById(w, current.researcherId);
   const selected = w.drafts.filter(
     (d) =>
       w.selectedDrafts.includes(d.id) &&
@@ -82,8 +87,8 @@ export function MailWorkspace() {
     if (!file || !current) return;
     const target = current.id;
     setFileError("");
-    if (file.size > 10 * 1024 * 1024) {
-      setFileError("Attachments must be smaller than 10 MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      setFileError("Attachments must be no larger than 2 MB each.");
       return;
     }
     if (!/\.(pdf|docx|txt)$/i.test(file.name)) {
@@ -208,17 +213,18 @@ export function MailWorkspace() {
                 {w.drafts.length === 1 ? "draft" : "drafts"}
               </Badge>
               <span className="small muted">
-                Local templates, ready for your edits
+                {w.drafts.some((d) => d.generation === "ai")
+                  ? "AI-assisted drafts, ready for your review"
+                  : "Preserved drafts, ready for your edits"}
               </span>
             </div>
             <Button onClick={openPreview}>
               Review drafts <ArrowRight size={17} />
             </Button>
           </div>
-          <Notice title="School email is not connected">
-            You can prepare, personalize, and export your drafts. UW identity
-            verification and Microsoft 365 sending are still being developed. No
-            email will be sent in this build.
+          <Notice title="Review before sending">
+            Verify your UW email with a code. Review every recipient, message
+            and attachment before confirming a batch.
           </Notice>
           <div className="mail-layout">
             <aside className="draft-list" aria-label="Email drafts">
@@ -241,7 +247,7 @@ export function MailWorkspace() {
                   <EnvelopeSimple size={17} />
                   <span>
                     <strong>
-                      {byId(d.researcherId)?.name || "Researcher"}
+                      {researcherById(w, d.researcherId)?.name || "Researcher"}
                     </strong>
                     <small>
                       {draftIssues(d).length
@@ -443,19 +449,30 @@ export function MailWorkspace() {
         wide
       >
         <div className="preview-body">
-          <div className="account-box">
-            <div className="row">
-              <UserCircle size={23} />
-              <h3>Connect your UW school email</h3>
-            </div>
-            <p>
-              No account connected. Your school email must be verified before
-              real sending is enabled.
-            </p>
-            <Button variant="secondary" onClick={() => setConnection(true)}>
-              Microsoft 365 connection
-            </Button>
-          </div>
+          <EmailVerification onChange={setIdentity} />
+          {submission.capability?.sendEnabled && (
+            <>
+              <Field
+                id="sender-display-name"
+                label="Your sender name"
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+                maxLength={100}
+              />
+              <Notice>
+                From: {senderName || "Your name"} via Research Explorer &lt;
+                {submission.capability.senderAddress}&gt;. Replies go to{" "}
+                {identity?.email || "your verified UW email"}. This uses the
+                platform sender, not your school mailbox.
+              </Notice>
+            </>
+          )}
+          {submission.error && (
+            <Notice tone="error">
+              {submission.error}{" "}
+              <a href="/explore/history">Open contact history</a>
+            </Notice>
+          )}
           {w.drafts.map((d) => {
             const issues = draftIssues(d);
             const missingFile = (d.attachments || []).some((a) =>
@@ -485,7 +502,7 @@ export function MailWorkspace() {
                         }))
                       }
                     />
-                    {byId(d.researcherId)?.name}
+                    {researcherById(w, d.researcherId)?.name}
                   </label>
                   <Badge
                     tone={issues.length || missingFile ? "negative" : "neutral"}
@@ -523,12 +540,13 @@ export function MailWorkspace() {
           {unique.length !== selected.length && (
             <Notice tone="error">
               Two drafts use the same recipient address. Resolve duplicates
-              before a future send.
+              before sending.
             </Notice>
           )}
           <Notice>
-            No emails can be sent yet. Your selections and drafts stay saved.
-            Exported text does not include attachment files.
+            {submission.capability?.sendEnabled
+              ? "Review every selected message and attachment. Send submits a separate message to each recipient. Acceptance by the email service does not guarantee delivery."
+              : "Outbound email is not configured. Your selections and drafts stay saved. Exported text does not include attachment files."}
           </Notice>
           <div className="preview-actions">
             <Button
@@ -539,33 +557,31 @@ export function MailWorkspace() {
               <DownloadSimple size={17} />
               Export selected
             </Button>
-            <Button disabled>
-              Send {unique.length} selected{" "}
+            <Button
+              disabled={
+                !submission.capability?.sendEnabled ||
+                !identity?.verified ||
+                !senderName.trim() ||
+                submission.busy ||
+                !unique.length ||
+                unique.length > 6 ||
+                unique.length !== selected.length
+              }
+              onClick={async () => {
+                const result = await submission.submit(unique, senderName);
+                if (result) {
+                  setPreview(false);
+                  notify(
+                    "Batch saved. Check each message's status in contact history.",
+                  );
+                  router.push("/explore/history");
+                }
+              }}
+            >
+              {submission.busy ? "Submitting" : "Send"} {unique.length} selected{" "}
               {unique.length === 1 ? "email" : "emails"}
             </Button>
           </div>
-        </div>
-      </Dialog>
-      <Dialog
-        open={connection}
-        onOpenChange={setConnection}
-        title="Microsoft 365 is not connected"
-        description="Your drafts are safe in this browser."
-      >
-        <div className="pending-feature">
-          <Notice>
-            School account verification and sending are not available in this
-            build.
-          </Notice>
-          <p>
-            Once the integration is ready, you will verify your UW email and
-            sign in with Microsoft to authorize sending. Entering an email
-            address alone will never connect an account.
-          </p>
-          <p>You can continue editing or export your drafts now.</p>
-          <Button variant="secondary" onClick={() => setConnection(false)}>
-            Keep working on drafts
-          </Button>
         </div>
       </Dialog>
       <Dialog

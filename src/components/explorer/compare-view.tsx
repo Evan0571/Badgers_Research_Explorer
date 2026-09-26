@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Scales, X, BookmarkSimple, ArrowRight } from "@phosphor-icons/react";
-import { byId } from "@/data/researchers";
+import { researcherById } from "@/lib/catalog";
 import { canEmail } from "@/lib/research";
 import {
   Badge,
@@ -17,7 +17,9 @@ export function CompareView() {
   const { workspace: w } = useWorkspace();
   const { toggleSave, toggleCompare, prepareDrafts } = useResearchActions();
   const [detail, setDetail] = useState<string | null>(null);
-  const chosen = w.comparison.map(byId).filter((r) => !!r);
+  const chosen = w.comparison
+    .map((id) => researcherById(w, id))
+    .filter((r) => !!r);
   return (
     <>
       <div className="page-heading">

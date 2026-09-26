@@ -25,6 +25,10 @@ coverage/
 *.tsbuildinfo
 output/
 .playwright-cli/
+.data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Local editor and operating system files
 .idea/
