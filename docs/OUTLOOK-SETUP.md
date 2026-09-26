@@ -2,6 +2,8 @@
 
 用户于 2026-09-26 选择：连接并授权 Outlook 后在网站内发送，接受连接时跳转学校认证页面。Resend 继续只发送验证码。以下是当前 Web 服务的配置，不是桌面公共客户端配置。
 
+本机注册与真实授权已经完成，无需重复注册。当前应用 Client ID 为 `08b58ce9-e817-4223-a2d5-f8fde5ea4175`，UW tenant ID 为 `2ca68321-0eda-4908-88b2-424a8cb4b0f9`；客户端凭据由用户创建，保存在忽略的 `.env.local`，到期日 **2027-03-25**。用户许可的一封本人邮箱测试已被 Microsoft 接受，详细证据见 [VERIFICATION.md](VERIFICATION.md)。下面步骤供新环境或凭据维护使用。
+
 ## 微软应用
 
 在有应用注册权限的 Microsoft Entra 目录中为 Research Explorer 创建独立注册，不覆盖其他项目的注册：

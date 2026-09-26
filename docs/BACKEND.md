@@ -10,7 +10,7 @@
 
 用户已选择 OpenAI，并确认发信前连接、授权 Outlook，接受连接时可能出现学校认证页。邮箱验证码仍用于证明归属；它不能授予发信权限。项目通过微软官方登录页面授权，不收集学校密码。
 
-教授联系邮件改为 Microsoft Graph `/me/sendMail`，实际 From 由用户授权的邮箱确定，保存到该邮箱的已发送邮件。平台代发适配器已移除；Resend 只发送验证码。Outlook 代码与模拟测试已完成，真实微软应用配置及邮箱授权仍待完成，当前发送入口保持禁用。详见 [OUTLOOK-SETUP.md](OUTLOOK-SETUP.md)。
+教授联系邮件改为 Microsoft Graph `/me/sendMail`，实际 From 由用户授权的邮箱确定，保存到该邮箱的已发送邮件。平台代发适配器已移除；Resend 只发送验证码。本机已完成 UW 单租户应用注册、回调、委托权限和凭据配置；用户邮箱真实授权成功，并按用户明确许可发送了一封给自己的测试邮件，Microsoft 返回接受。其他用户仍需各自验证、连接并授权，不能从这次成功推定所有学校账号都可授权。详见 [OUTLOOK-SETUP.md](OUTLOOK-SETUP.md) 与 [VERIFICATION.md](VERIFICATION.md)。
 
 ## 配置与启动
 
