@@ -36,7 +36,6 @@ export function MailWorkspace() {
   const { workspace: w, setWorkspace, notify } = useWorkspace();
   const router = useRouter();
   const submission = useMailSubmission();
-  const [senderName, setSenderName] = useState(w.background.name);
   const [activeId, setActiveId] = useState(w.drafts[0]?.id || "");
   const [preview, setPreview] = useState(false);
   const [identity, setIdentity] = useState<EmailIdentity | null>(null);
@@ -89,6 +88,15 @@ export function MailWorkspace() {
     setFileError("");
     if (file.size > 2 * 1024 * 1024) {
       setFileError("Attachments must be no larger than 2 MB each.");
+      return;
+    }
+    if (
+      (current.attachments || []).reduce((n, a) => n + a.size, file.size) >
+      2 * 1024 * 1024
+    ) {
+      setFileError(
+        "Keep attachments within 2 MB total per message for Outlook sending.",
+      );
       return;
     }
     if (!/\.(pdf|docx|txt)$/i.test(file.name)) {
@@ -191,6 +199,7 @@ export function MailWorkspace() {
           you, then review everything together.
         </p>
       </div>
+      <EmailVerification onChange={setIdentity} />
       {!current ? (
         <EmptyState
           icon={<EnvelopeSimple size={35} />}
@@ -223,8 +232,8 @@ export function MailWorkspace() {
             </Button>
           </div>
           <Notice title="Review before sending">
-            Verify your UW email with a code. Review every recipient, message
-            and attachment before confirming a batch.
+            Connect your UW Outlook mailbox. Review every recipient, message and
+            attachment before sending from your own address.
           </Notice>
           <div className="mail-layout">
             <aside className="draft-list" aria-label="Email drafts">
@@ -449,23 +458,26 @@ export function MailWorkspace() {
         wide
       >
         <div className="preview-body">
-          <EmailVerification onChange={setIdentity} />
-          {submission.capability?.sendEnabled && (
-            <>
-              <Field
-                id="sender-display-name"
-                label="Your sender name"
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                maxLength={100}
-              />
-              <Notice>
-                From: {senderName || "Your name"} via Research Explorer &lt;
-                {submission.capability.senderAddress}&gt;. Replies go to{" "}
-                {identity?.email || "your verified UW email"}. This uses the
-                platform sender, not your school mailbox.
-              </Notice>
-            </>
+          {identity?.outlook?.connected ? (
+            <Notice>
+              From: {identity.outlook.email}. Sent through your Outlook mailbox,
+              with a copy in Sent Items. Replies return to this address.
+            </Notice>
+          ) : (
+            <Notice>
+              Connect your verified UW mailbox before sending.{" "}
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPreview(false);
+                  document
+                    .getElementById("mail-account")
+                    ?.scrollIntoView({ block: "start" });
+                }}
+              >
+                Go to mailbox connection
+              </Button>
+            </Notice>
           )}
           {submission.error && (
             <Notice tone="error">
@@ -545,8 +557,8 @@ export function MailWorkspace() {
           )}
           <Notice>
             {submission.capability?.sendEnabled
-              ? "Review every selected message and attachment. Send submits a separate message to each recipient. Acceptance by the email service does not guarantee delivery."
-              : "Outbound email is not configured. Your selections and drafts stay saved. Exported text does not include attachment files."}
+              ? "Send submits one separate message per recipient through your Outlook account. Microsoft’s acceptance does not guarantee delivery."
+              : "Connect Outlook to send from your own mailbox. Your drafts stay saved. Exported text does not include attachment files."}
           </Notice>
           <div className="preview-actions">
             <Button
@@ -561,14 +573,17 @@ export function MailWorkspace() {
               disabled={
                 !submission.capability?.sendEnabled ||
                 !identity?.verified ||
-                !senderName.trim() ||
+                !identity?.outlook?.connected ||
                 submission.busy ||
                 !unique.length ||
                 unique.length > 6 ||
                 unique.length !== selected.length
               }
               onClick={async () => {
-                const result = await submission.submit(unique, senderName);
+                const result = await submission.submit(
+                  unique,
+                  identity!.outlook.email!,
+                );
                 if (result) {
                   setPreview(false);
                   notify(
@@ -578,7 +593,8 @@ export function MailWorkspace() {
                 }
               }}
             >
-              {submission.busy ? "Submitting" : "Send"} {unique.length} selected{" "}
+              {submission.busy ? "Submitting" : "Send from Outlook:"}{" "}
+              {unique.length} selected{" "}
               {unique.length === 1 ? "email" : "emails"}
             </Button>
           </div>

@@ -2,6 +2,7 @@ import { session } from "@/server/security";
 import { integrationStatus } from "@/server/config";
 import { db } from "@/server/db";
 import { checkOrigin, failure, json } from "@/server/http";
+import { outlookStatus } from "@/server/outlook";
 export const runtime = "nodejs";
 export async function GET() {
   try {
@@ -15,6 +16,7 @@ export async function GET() {
       verified,
       email: verified ? user.verified_email : null,
       verificationAvailable: integrationStatus().verification,
+      outlook: outlookStatus(user),
     });
   } catch (error) {
     return failure(error);

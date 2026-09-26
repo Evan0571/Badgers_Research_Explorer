@@ -12,13 +12,20 @@ export const config = () => ({
   model: process.env.OPENAI_MODEL || "gpt-5.5",
   apiKey: process.env.OPENAI_API_KEY || "",
   encryptionKey: process.env.APP_ENCRYPTION_KEY || "",
-  mailTransport: process.env.MAIL_TRANSPORT || "",
-  mailFrom: process.env.MAIL_FROM || "",
+  microsoftClientId: process.env.MICROSOFT_CLIENT_ID || "",
+  microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET || "",
+  microsoftTenant: process.env.MICROSOFT_TENANT_ID || "organizations",
   resendKey: process.env.RESEND_API_KEY || "",
   verificationFrom: process.env.VERIFICATION_FROM || "",
 });
 export function integrationStatus() {
   const c = config();
+  const outlook = !!(
+    /^[0-9a-f-]{36}$/i.test(c.microsoftClientId) &&
+    c.microsoftClientSecret &&
+    /^(organizations|[0-9a-f-]{36})$/i.test(c.microsoftTenant) &&
+    /^[a-f0-9]{64}$/i.test(c.encryptionKey)
+  );
   return {
     discovery: !!c.apiKey,
     generation: !!c.apiKey,
@@ -27,12 +34,7 @@ export function integrationStatus() {
       c.verificationFrom &&
       /^[a-f0-9]{64}$/i.test(c.encryptionKey)
     ),
-    sending: !!(
-      c.apiKey &&
-      c.mailTransport === "resend" &&
-      c.resendKey &&
-      /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(c.mailFrom) &&
-      /^[a-f0-9]{64}$/i.test(c.encryptionKey)
-    ),
+    outlook,
+    sending: !!(c.apiKey && outlook),
   };
 }

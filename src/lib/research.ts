@@ -105,6 +105,16 @@ export function draftIssues(draft: Draft): string[] {
   if (!draft.body.trim()) issues.push("Add the email body.");
   if (/\[[^\]]+\]|\{\{[^}]+\}\}/.test(draft.body + draft.subject))
     issues.push("Replace the unfinished placeholders.");
+  if (
+    (draft.attachments || []).reduce(
+      (n, attachment) => n + attachment.size,
+      0,
+    ) >
+    2 * 1024 * 1024
+  )
+    issues.push(
+      "Keep attachments within 2 MB total per message for Outlook sending.",
+    );
   return issues;
 }
 export function normalizeRecipients(drafts: Draft[]) {

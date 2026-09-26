@@ -1,8 +1,11 @@
-import { config, integrationStatus } from "@/server/config";
+import { integrationStatus } from "@/server/config";
+import { session } from "@/server/security";
+import { outlookStatus } from "@/server/outlook";
 import { json } from "@/server/http";
 export const dynamic = "force-dynamic";
-export function GET() {
+export async function GET() {
   const status = integrationStatus();
+  const outlook = outlookStatus(await session());
   return json({
     search: { mode: "live-source-review", liveCampusSearch: status.discovery },
     resume: {
@@ -13,10 +16,11 @@ export function GET() {
     drafts: { mode: "ai", aiGeneration: status.generation },
     email: {
       uwIdentityVerification: status.verification,
-      microsoft365Connected: false,
-      sendEnabled: status.sending,
-      transport: status.sending ? "platform" : null,
-      senderAddress: status.sending ? config().mailFrom : null,
+      outlookAvailable: status.outlook,
+      microsoft365Connected: outlook.connected,
+      sendEnabled: status.sending && outlook.connected,
+      transport: "outlook",
+      senderAddress: outlook.email,
     },
   });
 }

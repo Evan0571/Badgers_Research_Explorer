@@ -41,7 +41,6 @@ import {
   resumeDelivery,
   type Sender,
 } from "./delivery";
-import { configuredSender, sendWithResend } from "./mailer";
 import { makeDraft } from "@/lib/research";
 import { requestCode } from "./verification";
 
@@ -361,19 +360,17 @@ describe("API contracts and truthful provider errors", () => {
   });
   it("validates model output before returning it and disables response storage", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-only");
-    const spy = vi
-      .fn()
-      .mockResolvedValue(
-        Response.json({
-          status: "completed",
-          output: [
-            {
-              type: "message",
-              content: [{ type: "output_text", text: '{"answer":99}' }],
-            },
-          ],
-        }),
-      );
+    const spy = vi.fn().mockResolvedValue(
+      Response.json({
+        status: "completed",
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: '{"answer":99}' }],
+          },
+        ],
+      }),
+    );
     vi.stubGlobal("fetch", spy);
     await expect(
       structured("example", z.object({ answer: z.string() }), "system", {}),
@@ -408,35 +405,59 @@ function mailFixture() {
   const input = batchInputSchema.parse({
     idempotencyKey: randomUUID(),
     confirmed: true,
-    senderName: "Test Student",
+    senderEmail: "student@wisc.edu",
     drafts: [draft],
     attachments: [],
   });
   return { s, input, draft };
 }
-const platformFrom = "Research Explorer <research@example.test>";
+const mailboxFrom = "student@wisc.edu";
 
 describe("Durable per-message outbox", () => {
+  it("rejects a forged or stale sender before creating any delivery", () => {
+    const { s, input } = mailFixture();
+    expect(() =>
+      freezeBatch(s, { ...input, senderEmail: "other@wisc.edu" }, mailboxFrom),
+    ).toThrow(/sender no longer matches/);
+    expect(() => freezeBatch(s, input, "platform@example.test")).toThrow(
+      /sender no longer matches/,
+    );
+    expect(history(s)).toEqual([]);
+  });
+  it("rejects messages whose combined attachments exceed the Outlook message limit", () => {
+    const { s, input } = mailFixture();
+    input.drafts[0].attachments = [
+      {
+        id: "first",
+        name: "first.txt",
+        type: "text/plain",
+        size: 2 * 1024 * 1024,
+      },
+      { id: "second", name: "second.txt", type: "text/plain", size: 1 },
+    ];
+    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(/2 MB total/);
+    expect(history(s)).toEqual([]);
+  });
   it("freezes immutable snapshots and deduplicates the same confirmation", () => {
     const { s, input, draft } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
-    expect(freezeBatch(s, input, platformFrom)).toEqual({
+    const batch = freezeBatch(s, input, mailboxFrom);
+    expect(freezeBatch(s, input, mailboxFrom)).toEqual({
       id: batch.id,
       existing: true,
     });
     const original = draft.body;
     input.drafts[0].body = "Changed after confirmation";
-    expect(() => freezeBatch(s, input, platformFrom)).toThrow(
+    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(
       /different snapshot/,
     );
     expect(history(s)[0].draft.body).toBe(original);
     expect(() =>
-      freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, platformFrom),
+      freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, mailboxFrom),
     ).toThrow(/already queued/);
   });
   it("submits once under concurrent workers and records acceptance rather than delivery", async () => {
     const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     const sender = vi
       .fn<Sender>()
       .mockResolvedValue({ state: "accepted", requestId: "provider-test-id" });
@@ -454,7 +475,7 @@ describe("Durable per-message outbox", () => {
   });
   it("retains an uncertain submission and never retries it", async () => {
     const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     const sender = vi
       .fn<Sender>()
       .mockRejectedValue(new Error("connection lost"));
@@ -464,12 +485,12 @@ describe("Durable per-message outbox", () => {
     expect(history(s)[0].state).toBe("unknown");
     expect(() => resumeDelivery(s, history(s)[0].id)).toThrow(/uncertain/);
     expect(() =>
-      freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, platformFrom),
+      freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, mailboxFrom),
     ).toThrow(/already queued/);
   });
   it("allows an explicit retry after a confirmed rejection only", async () => {
     const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     const sender = vi
       .fn<Sender>()
       .mockResolvedValueOnce({ state: "failed", error: "Rejected" })
@@ -494,7 +515,7 @@ describe("Durable per-message outbox", () => {
       recipientEdited: true,
       to: "other@example.test",
     });
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     await processBatch(batch.id, async (m) =>
       m.draft.to === "other@example.test"
         ? { state: "failed", error: "Rejected" }
@@ -508,7 +529,7 @@ describe("Durable per-message outbox", () => {
   });
   it("rechecks account state after source checks and cancels queued work on sign out", async () => {
     const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, async () => {
       db().prepare("UPDATE sessions SET verified_at=NULL WHERE id=?").run(s.id);
@@ -518,7 +539,7 @@ describe("Durable per-message outbox", () => {
   });
   it("treats a failed source recheck as a known non-submission", async () => {
     const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, async () => {
       throw new Error("Source unavailable");
@@ -528,7 +549,7 @@ describe("Durable per-message outbox", () => {
   });
   it("does not send a cancelled row when a source check finishes late", async () => {
     const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, async () => {
       db()
@@ -540,7 +561,7 @@ describe("Durable per-message outbox", () => {
   });
   it("scopes history and retry to both browser session and verified account", () => {
     const { s, input } = mailFixture();
-    freezeBatch(s, input, platformFrom);
+    freezeBatch(s, input, mailboxFrom);
     const record = history(s)[0];
     expect(history({ ...s, id: "another-browser" })).toEqual([]);
     expect(history({ ...s, account_id: "another-account" })).toEqual([]);
@@ -555,7 +576,7 @@ describe("Durable per-message outbox", () => {
       { id: "test-file", name: "resume.txt", size: 15, type: "text/plain" },
     ];
     input.attachments = [{ id: "test-file", content }];
-    const batch = freezeBatch(s, input, platformFrom);
+    const batch = freezeBatch(s, input, mailboxFrom);
     input.attachments[0].content = "changed";
     const sender = vi
       .fn<Sender>()
@@ -574,76 +595,22 @@ describe("Durable per-message outbox", () => {
     input.drafts[0].attachments = [
       { id: "absent", name: "resume.pdf", size: 1, type: "application/pdf" },
     ];
-    expect(() => freezeBatch(s, input, platformFrom)).toThrow(/missing/);
+    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(/missing/);
     input.drafts[0].attachments = [];
     input.drafts.push({ ...input.drafts[0], id: randomUUID() });
-    expect(() => freezeBatch(s, input, platformFrom)).toThrow(
+    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(
       /one selected draft/,
     );
     input.drafts.pop();
     db()
       .prepare("UPDATE researchers SET checked_at=?")
       .run(Date.now() - 8 * 86400000);
-    expect(() => freezeBatch(s, input, platformFrom)).toThrow(/seven days/);
+    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(/seven days/);
     expect(history(s)).toEqual([]);
   });
 });
 
 describe("Email provider boundary (mocked; no email is sent)", () => {
-  function configureMail() {
-    vi.stubEnv("OPENAI_API_KEY", "test-only");
-    vi.stubEnv("RESEND_API_KEY", "test-only");
-    vi.stubEnv("MAIL_TRANSPORT", "resend");
-    vi.stubEnv("MAIL_FROM", "research@example.test");
-  }
-  it("fails closed without an enabled transport", () => {
-    vi.stubEnv("MAIL_TRANSPORT", "");
-    expect(() => configuredSender("Test Student")).toThrow(/not configured/);
-  });
-  it("sets the real platform From and verified Reply-To with a stable provider key", async () => {
-    configureMail();
-    const { draft } = mailFixture();
-    const spy = vi.fn().mockResolvedValue(Response.json({ id: "provider-id" }));
-    vi.stubGlobal("fetch", spy);
-    expect(
-      await sendWithResend({
-        id: "delivery-1",
-        sender: configuredSender("Test Student"),
-        replyTo: "student@wisc.edu",
-        draft,
-        attachments: [],
-      }),
-    ).toEqual({ state: "accepted", requestId: "provider-id" });
-    const sent = JSON.parse(spy.mock.calls[0][1].body);
-    expect(sent.from).toContain("<research@example.test>");
-    expect(sent.reply_to).toBe("student@wisc.edu");
-    expect(sent.to).toHaveLength(1);
-    expect(spy.mock.calls[0][1].headers["Idempotency-Key"]).toBe(
-      "research-delivery-1",
-    );
-  });
-  it("distinguishes definite rejection, ambiguous failure and connection loss", async () => {
-    configureMail();
-    const { draft } = mailFixture();
-    const message = {
-      id: "test",
-      sender: platformFrom,
-      replyTo: "student@wisc.edu",
-      draft,
-      attachments: [],
-    };
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response("", { status: 422 }))
-        .mockResolvedValueOnce(new Response("", { status: 500 }))
-        .mockRejectedValueOnce(new Error("timeout")),
-    );
-    expect((await sendWithResend(message)).state).toBe("failed");
-    expect((await sendWithResend(message)).state).toBe("unknown");
-    expect((await sendWithResend(message)).state).toBe("unknown");
-  });
   it("delivers a six digit challenge only through the configured provider and rate-limits requests", async () => {
     vi.stubEnv("RESEND_API_KEY", "test-only");
     vi.stubEnv("VERIFICATION_FROM", "verify@example.test");

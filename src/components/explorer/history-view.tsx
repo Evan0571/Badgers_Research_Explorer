@@ -230,7 +230,7 @@ export function HistoryView() {
                 Go back
               </Button>
               <Button
-                disabled={busy}
+                disabled={busy || !identity?.outlook?.connected}
                 onClick={async () => {
                   setBusy(true);
                   try {

@@ -7,6 +7,7 @@ export interface EmailIdentity {
   verified: boolean;
   email: string | null;
   verificationAvailable: boolean;
+  outlook: { configured: boolean; connected: boolean; email: string | null };
 }
 export function EmailVerification({
   onChange,
@@ -19,12 +20,41 @@ export function EmailVerification({
   const [sent, setSent] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [connectionNotice, setConnectionNotice] = useState("");
   const update = (value: EmailIdentity) => {
     setIdentity(value);
     onChange(value);
   };
   useEffect(() => {
     let cancelled = false;
+    const url = new URL(window.location.href);
+    const outcome = url.searchParams.get("outlook");
+    if (outcome) {
+      const messages: Record<string, string> = {
+        connected:
+          "Outlook connected. Review your drafts before sending from your own mailbox.",
+        outlook_denied:
+          "Outlook was not connected. You may have cancelled, or your school may require administrator approval.",
+        outlook_mismatch:
+          "That Outlook mailbox did not match your verified UW email. Verify its primary address and connect the matching account.",
+        outlook_state:
+          "The Outlook connection request expired or your session changed. Connect again.",
+        outlook_permission:
+          "Microsoft did not grant the requested sending permission. Your school may require administrator approval.",
+        outlook_config: "Outlook sending is not available on this server yet.",
+        outlook_failed:
+          "Outlook could not be connected. Try again or check your school’s app permissions.",
+      };
+      setConnectionNotice(
+        messages[outcome] || "Outlook connection could not be confirmed.",
+      );
+      url.searchParams.delete("outlook");
+      window.history.replaceState(
+        null,
+        "",
+        url.pathname + url.search + url.hash,
+      );
+    }
     requestJSON<EmailIdentity>("/api/auth/session")
       .then((value) => {
         if (!cancelled) update(value);
@@ -50,7 +80,7 @@ export function EmailVerification({
     }
   };
   return (
-    <div className="account-box">
+    <div className="account-box" id="mail-account">
       <h3>
         {identity?.verified ? "UW email verified" : "Verify your UW email"}
       </h3>
@@ -63,19 +93,83 @@ export function EmailVerification({
             onClick={() =>
               perform(async () => {
                 await requestJSON("/api/auth/session", {}, "DELETE");
-                update({ ...identity, verified: false, email: null });
+                update(await requestJSON<EmailIdentity>("/api/auth/session"));
+                setConnectionNotice("");
                 setSent(false);
               })
             }
           >
             Sign out of this email
           </Button>
+          <h3 style={{ marginTop: 20 }}>
+            {identity.outlook?.connected
+              ? "Outlook connected"
+              : "Send from your own Outlook"}
+          </h3>
+          {identity.outlook?.connected ? (
+            <>
+              <p>
+                From: {identity.outlook.email}. Each confirmed message is sent
+                through this mailbox and saved in Outlook Sent Items.
+              </p>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() =>
+                  perform(async () => {
+                    await requestJSON("/api/outlook/disconnect", {});
+                    update(
+                      await requestJSON<EmailIdentity>("/api/auth/session"),
+                    );
+                    setConnectionNotice(
+                      "Outlook disconnected. Queued messages were cancelled. Messages already submitted cannot be recalled here.",
+                    );
+                  })
+                }
+              >
+                Disconnect Outlook
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>
+                Connect the same UW account to send from your own address.
+                Microsoft may open your school’s sign-in and permission pages.
+              </p>
+              <p className="small muted">
+                Permission covers your basic profile, sending mail, and
+                maintaining the connection. Research Explorer does not request
+                access to read your inbox.
+              </p>
+              {!identity.outlook?.configured && (
+                <Notice>
+                  Outlook connection is not available yet. You can continue
+                  preparing and exporting drafts.
+                </Notice>
+              )}
+              <Button
+                variant="secondary"
+                disabled={busy || !identity.outlook?.configured}
+                onClick={() =>
+                  perform(async () => {
+                    const result = await requestJSON<{ url: string }>(
+                      "/api/outlook/connect",
+                      {},
+                    );
+                    window.location.assign(result.url);
+                  })
+                }
+              >
+                {busy ? "Connecting…" : "Connect Outlook"}
+              </Button>
+            </>
+          )}
         </>
       ) : (
         <>
           <p>
-            Receive a six-digit code in your UW mailbox. No school sign-in page
-            or mailbox password is required.
+            Verify your UW address with a six-digit code, then connect Outlook
+            to send from that mailbox.
           </p>
           {identity && !identity.verificationAvailable && (
             <Notice>
@@ -144,6 +238,7 @@ export function EmailVerification({
         </>
       )}
       {error && <Notice tone="error">{error}</Notice>}
+      {connectionNotice && <Notice>{connectionNotice}</Notice>}
     </div>
   );
 }

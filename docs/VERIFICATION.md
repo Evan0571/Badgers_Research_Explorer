@@ -1,5 +1,16 @@
 # Backend verification — 2026-09-26
 
+## Outlook sending implementation — September 26, 2026
+
+- User explicitly chose connecting Outlook and sending from the user's own mailbox, including a possible school sign-in page. The platform sender adapter was removed; Resend remains the verification-code provider.
+- `npm run typecheck`: passed. `npm test`: **68 tests passed across 4 files**. `npm run build`: passed, including the new connect/callback/disconnect routes. Provider-boundary tests explicitly mock MSAL and Graph; no live message was sent by these tests.
+- Tests cover PKCE/state/nonce parameters, callback expiration and replay, denied consent, mismatched primary mailboxes, absent `Mail.Send`, token encryption, disconnection during callback/refresh, revoked consent, queue cancellation, sender changes, attachment totals, and ambiguous Graph results that must not be retried automatically.
+- Actual production HTTP checks: capabilities reports Outlook unavailable and sending disabled while its credentials are incomplete; wrong-Origin connect returns 403; connect/disconnect without a session return 401; callback without a valid session returns a fixed 303 redirect without echoing its code or provider errors and with `Cache-Control: no-store`.
+- Production browser at 3002: the existing UW mailbox remains verified. The empty mail workspace still shows the new Outlook connection section, its unavailable notice, and a disabled Connect Outlook button. The current page reported no warning/error console entries. Screenshot: ignored `output/email-setup/outlook/mail-workspace.png`.
+- With the user's explicit registration/terms approval, created **Research Explorer** in the UW-Madison Entra directory. Client ID: `08b58ce9-e817-4223-a2d5-f8fde5ea4175`; tenant ID: `2ca68321-0eda-4908-88b2-424a8cb4b0f9`. Single-tenant organizational app; existing unrelated registrations were not modified. These identifiers are not secrets.
+- The portal confirmed saving the Web callback `http://127.0.0.1:3002/api/outlook/callback` and delegated `User.Read` / `Mail.Send` declarations through the Microsoft Graph app manifest. Implicit grants remain disabled. Permission declarations do not establish user or administrator consent.
+- Client credential creation and actual mailbox authorization are still pending. No claim of successful live Outlook sending, delivery, or school-wide consent is made. No professor was contacted. Setup: [OUTLOOK-SETUP.md](OUTLOOK-SETUP.md).
+
 ## Live email integration — September 26, 2026, 17:30 America/Chicago
 
 - Added `researchexplorer.online` to the user's Resend workspace in `us-east-1`.
@@ -7,7 +18,7 @@
 - Resend's domain API and dashboard both confirmed **Verified**; all three required records are verified.
 - Updated the ignored local `.env.local` to use `Research Explorer <verify@researchexplorer.online>` and restarted the production server at `http://127.0.0.1:3002`. Existing OpenAI, Resend and encryption keys were preserved and never printed.
 - From the actual application UI, requested exactly one verification email to the user's explicitly authorized UW mailbox. The application displayed the code-entry form; Resend reported **Delivered** for `Your Research Explorer verification code` (message ID `01a0dfd7-6174-740b-bb12-3e8853f9524b`). This confirms acceptance by the receiving email server, not inbox placement, reading, or successful code entry.
-- User code entry and the resulting verified browser session are pending. No professor-contact email was sent. Optional platform sending remains disabled pending the user's transport choice.
+- The user subsequently completed code entry; the verified browser session was confirmed in the database and in the production mail workspace during Outlook work. No professor-contact email was sent. The user subsequently selected Outlook, as recorded above.
 - Screenshots: ignored `output/email-setup/domain-verified.png` and `output/email-setup/verification-email-delivered.png`.
 - OpenAI credentials are present; this email configuration run did not perform a new model-quality evaluation. Production hosting has not been set up; the domain is currently configured for sending email.
 
@@ -25,7 +36,7 @@
 - Clean production browser at 3002: history shows the real unconfigured verification notice, zero console errors and warnings. Home, explore, history and capabilities return 200; removed components page returns 404. Claude original at 3000 still returns 200 and its Git checkout is unchanged.
 - Final production preview running at http://127.0.0.1:3002. The temporary development server and mocked QA browser were stopped.
 
-The checks in this section predate the live email integration recorded above. They do not independently validate OpenAI model quality or production hosting. Optional platform sending is disabled pending the user's transport choice. Setup and limitations: [BACKEND.md](BACKEND.md).
+The checks in this section predate the live email integration and Outlook implementation recorded above. Platform-sender checks describe the superseded adapter. They do not independently validate OpenAI model quality or production hosting. Setup and limitations: [BACKEND.md](BACKEND.md).
 
 ---
 

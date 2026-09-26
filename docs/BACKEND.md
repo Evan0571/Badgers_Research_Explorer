@@ -8,9 +8,9 @@
 
 本机已配置 OpenAI 与 Resend 凭据；Resend 域名查询接口已真实返回成功。域名 `researchexplorer.online` 已添加到 Resend，Cloudflare DNS 已按当前 Resend 控制台要求配置，公网 DNS-over-HTTPS 查询已能读取全部记录。验证码发件地址为 `Research Explorer <verify@researchexplorer.online>`；真实收件联调状态见 [VERIFICATION.md](VERIFICATION.md)。模型回答质量仍需单独评估，配置存在不能当成完整端到端验证。
 
-用户已选择 OpenAI，并明确邮箱验证只使用验证码，不跳转学校认证页。PRD 中的 Microsoft 365 授权流程在本实现中取消；不需要注册 Microsoft 应用，不收集学校密码。验证码只证明邮箱归属，不授予访问学校邮箱的权限。
+用户已选择 OpenAI，并确认发信前连接、授权 Outlook，接受连接时可能出现学校认证页。邮箱验证码仍用于证明归属；它不能授予发信权限。项目通过微软官方登录页面授权，不收集学校密码。
 
-可选的 Resend 平台代发适配器已经实现，默认关闭，**平台代发是否采用仍等待用户选择**。启用后，From 为“学生姓名 via Research Explorer <平台地址>”，Reply-To 为已验证的 UW 邮箱；预览完整展示两者。它不能声称从学生自己的 UW 邮箱发出。
+教授联系邮件改为 Microsoft Graph `/me/sendMail`，实际 From 由用户授权的邮箱确定，保存到该邮箱的已发送邮件。平台代发适配器已移除；Resend 只发送验证码。Outlook 代码与模拟测试已完成，真实微软应用配置及邮箱授权仍待完成，当前发送入口保持禁用。详见 [OUTLOOK-SETUP.md](OUTLOOK-SETUP.md)。
 
 ## 配置与启动
 
@@ -19,8 +19,8 @@
 1. 在**本分支的工作目录**将 `.env.example` 复制为 `.env.local`。当前本机文件已创建，并已生成独立的 `APP_ENCRYPTION_KEY`，无需覆盖。
 2. 填写 `OPENAI_API_KEY`，确保项目可使用 Responses API、web_search 和所选模型。`OPENAI_MODEL` 默认 `gpt-5.5`，可改为账号实际可用且支持这些功能的模型。
 3. 邮箱验证码需要 `RESEND_API_KEY` 和 `VERIFICATION_FROM`。From 必须是邮件服务允许的发件地址；通常需先在 Resend 验证自己的域名。不要填学生的 `@wisc.edu` 地址作为平台 From。
-4. `APP_ENCRYPTION_KEY` 为 64 位十六进制随机值，用于验证码摘要、发送正文和附件的加密。更换密钥会使旧发送快照无法解密，数据库与密钥需要一起备份。
-5. 只有决定采用平台代发后，才设置 `MAIL_TRANSPORT=resend` 和 `MAIL_FROM=research@你的已验证域名`。`MAIL_FROM` 只填邮箱，学生显示名由预览收集。
+4. `APP_ENCRYPTION_KEY` 为 64 位十六进制随机值，用于验证码摘要、发送正文、附件和 Microsoft 令牌缓存的加密。更换密钥会使旧快照和连接无法解密，数据库与密钥需要一起备份。
+5. 按 [Outlook 接入说明](OUTLOOK-SETUP.md) 注册 Microsoft Entra Web 应用，填写 `MICROSOFT_CLIENT_ID`、`MICROSOFT_CLIENT_SECRET`、`MICROSOFT_TENANT_ID`。只请求委托 `User.Read` 和 `Mail.Send`；不申请应用级邮箱权限或读取收件箱权限。
 6. `APP_ORIGIN` 必须与浏览器的实际地址完全一致；当前是 `http://127.0.0.1:3002`。换端口、使用 localhost 或正式域名时同时修改。
 
 ```powershell
@@ -70,7 +70,9 @@ TTL 均为 Auto。不要依据旧教程额外叠加冲突的 SPF/MX 记录；以
 
 验证码 6 位、10 分钟有效、最多 5 次尝试、每分钟最多请求一次，按浏览器、邮箱和全局限流。成功后绑定当前浏览器会话与 UW 邮箱，验证状态持续 24 小时。没有开发后门、固定验证码或在日志里打印验证码。
 
-发送前逐封保存不可变正文、收件人、实际发件人、附件字节和校验信息；同一次确认具有幂等键，并阻止同一草稿的重复提交。单次最多 6 封；附件 PDF/DOCX/TXT 每个最多 2 MB，整批附件最多 6 MB。浏览器附件不存在或大小变化时拒绝发送。
+连接 Outlook 使用官方 MSAL Node、授权码、PKCE、state 与 nonce；回调只能消费一次。Graph 返回的主邮箱必须与已验证 UW 邮箱完全一致，不能用匹配的登录别名替代不同的主邮箱。每次发送前刷新令牌并重新核查账号。断开连接会删除本应用保存的令牌并取消排队邮件；不会撤销已经提交的邮件或自动撤销微软端授权。
+
+发送前逐封保存不可变正文、收件人、实际发件人、附件字节和校验信息；同一次确认具有幂等键，并阻止同一草稿的重复提交。预览确认的发件地址必须与当前连接邮箱一致。单次最多 6 封；附件 PDF/DOCX/TXT，每封附件总计最多 2 MB，整批附件最多 6 MB。浏览器附件不存在或大小变化时拒绝发送。
 
 每封发送前重新抓取其公开联系方式并通过模型检查当前身份和联系途径。来源不可读、联系地址消失或明确关闭等情况不会提交邮件。验证码过期、登出或账号变化会取消尚未提交的消息。
 
@@ -78,7 +80,7 @@ TTL 均为 Auto。不要依据旧教程额外叠加冲突的 SPF/MX 记录；以
 - `submitting`：已领取提交任务；不能再取消。
 - `accepted`：邮件服务确认接收请求，**不代表投递、阅读或回复**。
 - `failed`：来源检查失败或服务明确拒绝；可查看原内容后人工重试。
-- `unknown`：超时、网络中断、服务异常或中断提交；可能已经发出，禁止自动或普通重试，应先在邮件服务后台核对。
+- `unknown`：超时、网络中断、服务异常或中断提交；可能已经发出，禁止自动或普通重试，应先在 Outlook 已发送邮件中核对。Graph 的 `client-request-id` 只用于诊断，不提供发送幂等保证。
 - `cancelled`：提交前取消。
 
 历史只显示当前浏览器会话与已验证邮箱所属的真实数据库记录；草稿或导出不产生发送记录。手动进度备注与服务状态分开。没有投递 Webhook、收件箱同步或自动读取教授回复。
@@ -104,14 +106,17 @@ SQLite 默认位于 `.data/research.sqlite`，WAL 模式。会话 Cookie 为 Htt
 | GET / DELETE `/api/auth/session` | 会话验证状态 / 登出邮箱                      |
 | POST `/api/auth/request-code`    | 发送真实邮箱验证码                           |
 | POST `/api/auth/verify-code`     | 核对并消费验证码                             |
+| POST `/api/outlook/connect`      | 为已验证会话创建 Microsoft 授权链接         |
+| GET `/api/outlook/callback`      | 消费单次回调，核对邮箱并加密保存令牌         |
+| POST `/api/outlook/disconnect`   | 删除本地令牌并取消尚未提交的消息             |
 | POST `/api/mail/send`            | 确认不可变批次后提交，配置不完整时拒绝       |
 | GET / PATCH `/api/mail/history`  | 历史、取消排队消息、手动备注                 |
 | POST `/api/mail/retry`           | 人工确认后恢复指定排队消息或重试明确失败消息 |
 
 ## 验证
 
-自动测试覆盖来源证据、未知条件、账号隔离、验证码过期/次数/重放、流式请求上限、任务部分恢复、不可变快照、并发提交防重、超时禁止重试、附件一致性和提供商状态分类。外部 OpenAI 和 Resend 在测试中使用显式模拟响应；测试不发送真实邮件。
+自动测试覆盖来源证据、未知条件、账号隔离、验证码与 OAuth 回调过期/重放、邮箱不匹配、授权撤回、连接并发变化、流式请求上限、任务部分恢复、不可变快照、并发提交防重、超时禁止重试、附件一致性和提供商状态分类。OpenAI、Resend、MSAL 和 Graph 的提供商边界使用显式模拟响应；测试不发送真实邮件。
 
 `npm run probe:sources` 可独立验证网页抓取链路，不调用 AI，也不发送邮件。已实际读取 UW 计算机科学研究组页面。浏览器验证与最终构建结果见 `docs/VERIFICATION.md`。
 
-服务协议参考：[OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search)、[Structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs)、[Resend send email](https://resend.com/docs/api-reference/emails/send-email)、[Resend idempotency](https://resend.com/docs/dashboard/emails/idempotency-keys)、[Node SQLite](https://nodejs.org/api/sqlite.html)。
+服务协议参考：[OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search)、[Structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs)、[Resend send email](https://resend.com/docs/api-reference/emails/send-email)、[Graph sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)、[MSAL Node](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests)、[Node SQLite](https://nodejs.org/api/sqlite.html)。

@@ -19,13 +19,23 @@ export function useMailSubmission() {
       .then((result) => setCapability(result.email))
       .catch(() => {});
   }, []);
-  async function submit(drafts: Draft[], senderName: string) {
+  async function submit(drafts: Draft[], senderEmail: string) {
     if (lock.current) return null;
     lock.current = true;
     setBusy(true);
     setError("");
     try {
       const snapshots = structuredClone(drafts);
+      if (
+        snapshots.some(
+          (d) =>
+            (d.attachments || []).reduce((n, a) => n + a.size, 0) >
+            2 * 1024 * 1024,
+        )
+      )
+        throw new Error(
+          "Keep attachments within 2 MB total per message for Outlook sending.",
+        );
       const metas = [
         ...new Map(
           snapshots.flatMap((d) => d.attachments || []).map((a) => [a.id, a]),
@@ -60,7 +70,7 @@ export function useMailSubmission() {
       const payload = {
         drafts: snapshots,
         attachments,
-        senderName: senderName.trim(),
+        senderEmail,
         confirmed: true,
       };
       const hash = Array.from(

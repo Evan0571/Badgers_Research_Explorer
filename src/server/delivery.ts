@@ -16,12 +16,7 @@ const attachmentSchema = z.object({
 export const batchInputSchema = z.object({
   idempotencyKey: z.string().uuid(),
   confirmed: z.literal(true),
-  senderName: z
-    .string()
-    .trim()
-    .min(1)
-    .max(100)
-    .regex(/^[^\r\n<>\x00-\x1f]+$/),
+  senderEmail: z.email().max(254),
   drafts: z.array(draftSchema).min(1).max(6),
   attachments: z.array(attachmentSchema).max(12),
 });
@@ -64,6 +59,12 @@ export type Sender = (message: {
 
 export function freezeBatch(user: Session, input: BatchInput, sender: string) {
   const identity = verifiedIdentity(user);
+  if (input.senderEmail !== identity.email || sender !== identity.email)
+    throw new AppError(
+      "SENDER_CHANGED",
+      "The sender no longer matches your reviewed UW mailbox. Review the messages again.",
+      409,
+    );
   const fingerprint = digest(
     JSON.stringify({
       drafts: input.drafts,
@@ -167,6 +168,15 @@ export function freezeBatch(user: Session, input: BatchInput, sender: string) {
           };
         },
       );
+      if (
+        attachments.reduce((n, attachment) => n + attachment.size, 0) >
+        2 * 1024 * 1024
+      )
+        throw new AppError(
+          "ATTACHMENT_SIZE",
+          "Keep attachments within 2 MB total per message for Outlook sending.",
+          413,
+        );
       return { draft: { ...draft, to: recipient }, attachments };
     });
     if (totalBytes > 6 * 1024 * 1024)
@@ -314,6 +324,12 @@ export function resumeDelivery(user: Session, id: string) {
       throw new AppError(
         "NO_RETRY",
         "Only a queued message or a confirmed rejection can be submitted. An uncertain submission must not be retried.",
+        409,
+      );
+    if (row.sender !== identity.email)
+      throw new AppError(
+        "SENDER_CHANGED",
+        "This old snapshot uses a different sender. Review a new batch from your own mailbox.",
         409,
       );
     const draft = unseal<Draft>(row.snapshot);
