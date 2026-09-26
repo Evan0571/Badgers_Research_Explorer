@@ -1,5 +1,18 @@
 # Backend verification — 2026-09-26
 
+## Live email integration — September 26, 2026, 17:30 America/Chicago
+
+- Added `researchexplorer.online` to the user's Resend workspace in `us-east-1`.
+- Configured the exact Resend-generated DKIM TXT record, `rsend` and `send` CNAME records (DNS only), and optional `_dmarc` TXT record in Cloudflare. Public DNS-over-HTTPS queries returned all four records. The local UDP DNS path initially returned NXDOMAIN, so it was not used as the final propagation signal.
+- Resend's domain API and dashboard both confirmed **Verified**; all three required records are verified.
+- Updated the ignored local `.env.local` to use `Research Explorer <verify@researchexplorer.online>` and restarted the production server at `http://127.0.0.1:3002`. Existing OpenAI, Resend and encryption keys were preserved and never printed.
+- From the actual application UI, requested exactly one verification email to the user's explicitly authorized UW mailbox. The application displayed the code-entry form; Resend reported **Delivered** for `Your Research Explorer verification code` (message ID `01a0dfd7-6174-740b-bb12-3e8853f9524b`). This confirms acceptance by the receiving email server, not inbox placement, reading, or successful code entry.
+- User code entry and the resulting verified browser session are pending. No professor-contact email was sent. Optional platform sending remains disabled pending the user's transport choice.
+- Screenshots: ignored `output/email-setup/domain-verified.png` and `output/email-setup/verification-email-delivered.png`.
+- OpenAI credentials are present; this email configuration run did not perform a new model-quality evaluation. Production hosting has not been set up; the domain is currently configured for sending email.
+
+## Implementation checks before live credentials were configured
+
 - `npm run typecheck`: passed.
 - `npm test`: 47 tests passed across 3 files. Provider-boundary tests use mocks and cannot establish live model quality or email delivery.
 - `npm run build`: passed; all pages and 12 API route families compile. Node prints its expected experimental SQLite warning. The earlier dynamic database-path tracing warning has been resolved.
@@ -12,7 +25,7 @@
 - Clean production browser at 3002: history shows the real unconfigured verification notice, zero console errors and warnings. Home, explore, history and capabilities return 200; removed components page returns 404. Claude original at 3000 still returns 200 and its Git checkout is unchanged.
 - Final production preview running at http://127.0.0.1:3002. The temporary development server and mocked QA browser were stopped.
 
-Live OpenAI answers, actual verification-code arrival, sender-domain configuration, real email delivery and production hosting remain unverified until credentials and an authorized test mailbox are supplied. Optional platform sending is disabled pending the user's transport choice. Setup and limitations: [BACKEND.md](BACKEND.md).
+The checks in this section predate the live email integration recorded above. They do not independently validate OpenAI model quality or production hosting. Optional platform sending is disabled pending the user's transport choice. Setup and limitations: [BACKEND.md](BACKEND.md).
 
 ---
 

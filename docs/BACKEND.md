@@ -6,7 +6,7 @@
 
 已实现 OpenAI 联网搜索、原始网页抓取和证据校验、AI 研究解释、逐人邮件草稿、可确认的简历建议、邮件验证码、数据库任务状态，以及逐封邮件提交和历史记录。原来的四人资料集只用于首页示例和旧收藏兼容，不作为搜索失败的替代结果。
 
-**本机目前没有配置 OpenAI 和邮件服务凭据。** 外部接口的代码已接入，模型回答质量、真实验证码到达、邮件投递仍需配置后联调；不能把单元测试或浏览器模拟结果当成真实服务成功。没有向教授或其他真实收件人发送邮件。
+本机已配置 OpenAI 与 Resend 凭据；Resend 域名查询接口已真实返回成功。域名 `researchexplorer.online` 已添加到 Resend，Cloudflare DNS 已按当前 Resend 控制台要求配置，公网 DNS-over-HTTPS 查询已能读取全部记录。验证码发件地址为 `Research Explorer <verify@researchexplorer.online>`；真实收件联调状态见 [VERIFICATION.md](VERIFICATION.md)。模型回答质量仍需单独评估，配置存在不能当成完整端到端验证。
 
 用户已选择 OpenAI，并明确邮箱验证只使用验证码，不跳转学校认证页。PRD 中的 Microsoft 365 授权流程在本实现中取消；不需要注册 Microsoft 应用，不收集学校密码。验证码只证明邮箱归属，不授予访问学校邮箱的权限。
 
@@ -39,6 +39,19 @@ npm run start -- --port 3002
 ```
 
 不要在运行 production server 的同一个目录同时重建 `.next`。修改 `.env.local` 后重启服务。`npm run check:config` 只显示是否配置，不输出密钥。配置完整不等于凭据有效，后者需要真实请求验证。
+
+### 本机发信域名
+
+域名注册与 DNS 位于 Cloudflare，Resend 区域为 `us-east-1`。2026-09-26 按 Resend 为此域名实际生成的记录配置：
+
+| 类型 | 名称 | 目标 / 内容 |
+| --- | --- | --- |
+| TXT | `resend._domainkey` | 此域名在 Resend 控制台生成的 DKIM 公钥 |
+| CNAME | `rsend` | `rsend.forge.rmta.net`，DNS only |
+| CNAME | `send` | `send.forge.rmta.net`，DNS only |
+| TXT | `_dmarc` | `v=DMARC1; p=none;`，初始观察策略 |
+
+TTL 均为 Auto。不要依据旧教程额外叠加冲突的 SPF/MX 记录；以后更换服务时以提供商当前给出的值为准。尚未启用收信服务或创建该域名的收件箱。网站仍运行在本机 3002，注册域名与验证发信域名不等于网站已经部署。
 
 ## 搜索与 AI 的实际逻辑
 
