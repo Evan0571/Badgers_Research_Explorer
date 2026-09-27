@@ -1,4 +1,5 @@
 "use client";
+import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -22,12 +23,6 @@ export function ExplorerShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { workspace, ready, storageError, jobs } = useWorkspace();
   const navigation = [
-    {
-      href: "/explore/faculty",
-      label: t("Faculty catalog", "全校教授名录"),
-      icon: UsersThree,
-      count: 0,
-    },
     {
       href: "/explore",
       label: t("Explore", "探索研究"),
@@ -65,6 +60,12 @@ export function ExplorerShell({ children }: { children: React.ReactNode }) {
       count: 0,
     },
     {
+      href: "/explore/faculty",
+      label: t("Faculty catalog", "全校教授名录"),
+      icon: UsersThree,
+      count: 0,
+    },
+    {
       href: "/explore/settings",
       label: t("Settings", "设置"),
       icon: GearSix,
@@ -78,18 +79,22 @@ export function ExplorerShell({ children }: { children: React.ReactNode }) {
         <p className="sidebar-campus">UW-Madison</p>
         <nav aria-label="Workspace navigation">
           {navigation.map(({ href, label, icon: Icon, count }) => (
-            <Link
-              key={href}
-              href={href}
-              className={
-                pathname === href ? "sidebar-link active" : "sidebar-link"
-              }
-              aria-current={pathname === href ? "page" : undefined}
-            >
-              <Icon size={20} />
-              <span>{label}</span>
-              {count > 0 && <span className="nav-count">{count}</span>}
-            </Link>
+            <Fragment key={href}>
+              {href === "/explore/faculty" && (
+                <div className="sidebar-divider" aria-hidden="true" />
+              )}
+              <Link
+                href={href}
+                className={
+                  pathname === href ? "sidebar-link active" : "sidebar-link"
+                }
+                aria-current={pathname === href ? "page" : undefined}
+              >
+                <Icon size={20} />
+                <span>{label}</span>
+                {count > 0 && <span className="nav-count">{count}</span>}
+              </Link>
+            </Fragment>
           ))}
         </nav>
         <div className="sidebar-bottom">

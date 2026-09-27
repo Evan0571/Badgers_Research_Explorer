@@ -780,6 +780,11 @@ details[open] .faq-plus {
   color: var(--muted);
   padding: 10px 13px;
 }
+.sidebar-divider {
+  height: 1px;
+  margin: 10px 13px;
+  background: var(--hairline);
+}
 .sidebar-link:hover {
   background: var(--card);
 }
@@ -2077,6 +2082,12 @@ details[open] .faq-plus {
   }
   .sidebar-link svg {
     width: 17px;
+  }
+  .sidebar-divider {
+    flex: 0 0 1px;
+    height: auto;
+    margin: 8px;
+    align-self: stretch;
   }
   .sidebar-link .nav-count {
     font-size: 9px;
