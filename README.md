@@ -1,50 +1,145 @@
+<div align="center">
+
+<img src="public/brand/badgers-research-explorer.png" alt="Badgers Research Explorer logo" width="88" />
+
 # Badgers Research Explorer
 
-帮助 UW-Madison 学生从兴趣出发理解、比较研究，并准备逐人联系材料。当前沿用已确认的 Apple 风格组件与原版布局，无独立组件说明页。
+**Your curiosity. A place to begin.**
 
-后端已接入 OpenAI 联网检索、来源核查、AI 草稿、简历建议、邮件验证码、持久任务和发送历史。本机已配置 OpenAI；Resend 域名和真实验证码投递已验证。Outlook 本人邮箱发送已完成微软应用配置和真实授权，用户批准的一封自发测试邮件已确认出现在收件箱和已发送邮件；详见 [验证记录](docs/VERIFICATION.md)。
+Find research at UW–Madison, understand the work, and take your first step.
 
-邮箱归属通过验证码验证；发信前另行连接同一个 UW Outlook 邮箱，连接时可能跳转学校认证页。邮件通过 Microsoft Graph 从本人邮箱发出并保存到 Outlook 已发送邮件。Resend 只发验证码，项目不读取收件箱。配置步骤见 [Outlook 接入说明](docs/OUTLOOK-SETUP.md)。
+**English** · [简体中文](README.zh-CN.md)
 
-## 启动
+[Visit the website](https://researchexplorer.online) · [Start exploring](https://researchexplorer.online/explore) · [Run locally](#run-locally) · [Documentation](#documentation)
 
-需要 Node.js 22.13+，建议本机使用 Node 24。
+[![Website](https://img.shields.io/badge/Website-researchexplorer.online-C5050C?style=flat-square)](https://researchexplorer.online) [![Next.js](https://img.shields.io/badge/Next.js-16-171717?style=flat-square&logo=nextdotjs)](package.json) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
 
-```powershell
+</div>
+
+<a href="https://researchexplorer.online">
+  <img src="docs/images/home.png" alt="The live Badgers Research Explorer homepage, with an interest-led introduction and a sourced research example" width="100%" />
+</a>
+
+## A starting point for student research
+
+Finding a research mentor often starts with scattered faculty pages, unfamiliar terminology, and uncertainty about what to say. **Badgers Research Explorer** brings discovery, comparison, and individual outreach into one workspace built for UW–Madison students.
+
+Start with a question, a topic, or a researcher's name. You do not need a finished résumé or previous research experience to begin.
+
+## From curiosity to a conversation
+
+| Step           | What you can do                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Explore**    | Describe your interests in English or Chinese. Search the stored faculty catalog, with public-web discovery available to expand the search.      |
+| **Understand** | Read accessible research explanations, follow original sources, and see what is supported, missing, or out of date.                              |
+| **Compare**    | Save researchers to a shortlist, keep notes, and compare research directions before deciding whom to contact.                                    |
+| **Prepare**    | Add optional background or upload a PDF, DOCX, or TXT résumé. Create individual email drafts and review AI revisions before applying them.       |
+| **Reach out**  | Verify your UW email, connect the same Outlook mailbox, review each message and its attachments, and track submission status in contact history. |
+
+> **A research connection is not an open position.** Research relevance, public contact information, and evidence of recruiting are checked separately. Missing information stays unknown.
+
+<details>
+<summary><strong>Inside the exploration workspace</strong></summary>
+
+<br />
+<img src="docs/images/workspace.png" alt="The exploration workspace with an interests field, optional student background, résumé upload, and workflow navigation" width="100%" />
+
+Screenshots captured from the live site on September 27, 2026. Catalog coverage changes over time.
+
+</details>
+
+## Built with
+
+| Layer               | Technology                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Application         | Next.js App Router · React · TypeScript                                                                       |
+| Interface           | CSS design tokens · Radix UI · Phosphor Icons                                                                 |
+| AI assistance       | OpenAI for search interpretation, web discovery, research explanations, and writing assistance                |
+| Data                | Supabase / PostgreSQL for production state and the shared faculty catalog; SQLite for local application state |
+| Email               | Microsoft Entra + Microsoft Graph for connected Outlook sending; Resend for verification codes                |
+| Documents           | `pdf-parse` + native canvas for PDFs; Mammoth for DOCX                                                        |
+| Deployment & checks | Vercel · Vitest · Playwright                                                                                  |
+
+The browser calls server-side API routes; provider keys stay on the server. The shared catalog contains public professional information. Production application state lives in a separate private database schema.
+
+## Run locally
+
+Use **Node.js 22.13+**; Node.js 24 is recommended.
+
+```bash
+git clone https://github.com/Evan0571/BuildFest_project.git
+cd BuildFest_project
 npm ci
-# 首次运行时复制 .env.example 为 .env.local，并按说明填写凭据。
+```
+
+Copy [`.env.example`](.env.example) to `.env.local`, then configure the integrations you need:
+
+| Variables                                                               | Purpose                                                                                                                                 |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_ORIGIN`                                                            | The exact browser origin; use `http://127.0.0.1:3002` for the commands below.                                                           |
+| `APP_ENCRYPTION_KEY`                                                    | A 64-character hexadecimal key for encrypted server data. See the generation command in `.env.example`.                                 |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`                                        | AI discovery and writing features. Provider usage may incur costs.                                                                      |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                             | Your shared faculty catalog. Apply its [schema migration](supabase/migrations/202609270001_research_catalog.sql) before importing data. |
+| `DATABASE_URL`                                                          | PostgreSQL application state for production. Leave unset for local SQLite.                                                              |
+| `RESEND_API_KEY`, `VERIFICATION_FROM`                                   | UW email verification through a verified sender domain.                                                                                 |
+| `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID` | Outlook account authorization and sending. See [Outlook setup](docs/OUTLOOK-SETUP.md).                                                  |
+
+```bash
 npm run check:config
 npm run dev -- --port 3002
 ```
 
-[当前预览](http://127.0.0.1:3002) · [探索工作区](http://127.0.0.1:3002/explore)
+Open [http://127.0.0.1:3002](http://127.0.0.1:3002). `check:config` reports configuration presence; it does not validate provider credentials.
 
-完整配置、API、实际搜索逻辑、发送状态和限制见 [后端说明](docs/BACKEND.md)。`APP_ORIGIN` 要与浏览器地址一致。密钥只能放在本分支工作目录的 `.env.local`，不提交 Git。
+A fresh clone does **not** include the production database or a populated faculty catalog. Follow the [catalog guide](docs/CATALOG.md) to configure and populate your own catalog. Unconfigured integrations remain unavailable; failed searches do not silently substitute demo profiles. Keep credentials in `.env.local`, which is excluded from Git.
 
-```powershell
+<details>
+<summary><strong>Development checks and production build</strong></summary>
+
+```bash
 npm run typecheck
-npm test
+npm test -- --maxWorkers=2
 npm run build
 npm run start -- --port 3002
 ```
 
-构建前停止同一目录的 Next 服务。原 Claude 版在独立目录、[3000 端口](http://127.0.0.1:3000)及 `claude-preview-2026-09-26` 标签保留。纯 Apple 展示布局保存在 `apple-showcase-2026-09-26`；后端修改前的已确认前端保存在 `frontend-approved-2026-09-26`。
+Stop any development server using the same checkout before building. For cloud hosting, use the [Vercel deployment guide](docs/VERCEL-DEPLOYMENT.md), including PostgreSQL migrations, environment variables, and the Outlook callback URL.
 
-## 结构
+</details>
 
-- `src/server/`：OpenAI、网页检索与证据、SQLite、验证码、持久任务、逐封发送。
-- `src/app/api/`：有输入校验、会话约束和速率限制的服务接口。
-- `src/components/explorer/`：产品流程及异步任务恢复。
-- `src/components/ui/`、`src/app/{tokens,apple,layout}.css`：现有组件与视觉布局。
-- `src/data/researchers.ts`：旧示例与历史收藏兼容；真实搜索失败时不会回退到此数据。
-- `docs/PRD.md`、`docs/BRD.md`：原始需求；[实施状态](docs/IMPLEMENTATION.md)；[验证记录](docs/VERIFICATION.md)。
+## Your work, your review
 
-浏览器保存查询、收藏、备注、草稿和附件；服务器 SQLite 保存任务、来源及发送历史。当前没有跨设备同步。发送快照的正文和附件加密保存，数据库目录 `.data/` 已排除提交。简历分析与邮件附件是两个独立操作。
+- **Browser workspace:** interests, shortlists, notes, drafts, and attachments are saved in the current browser. They are not automatically synchronized across devices or website origins.
+- **Optional résumé:** uploads support text-based PDF, DOCX, and TXT files up to 3 MiB. PDFs are limited to 20 pages; scanned documents need OCR. Extraction does not retain the original uploaded file or automatically attach it to an email.
+- **Review before sending:** AI revisions can be previewed, applied, and undone. Outlook sending requires verification and account authorization; the app does not read your inbox. A provider accepting a message is not proof of delivery.
+- **Server persistence:** production stores sessions, jobs, and contact history in PostgreSQL, with sensitive message snapshots, attachments, and Outlook tokens encrypted. See [deployment and persistence](docs/VERCEL-DEPLOYMENT.md) for operational details.
 
-设计依据第三方 [Apple DESIGN.md](https://getdesign.md/apple/design-md)，不是 Apple 官方组件包；来源见 [DESIGN.md](DESIGN.md) 和 [设计对照说明](docs/APPLE-PREVIEW.md)。
+## Project map
 
-## September 27 workflow and catalog update
+```text
+src/app/                 Pages and server API routes
+src/components/explorer/ Discovery, comparison, drafts, and contact history
+src/components/ui/       Shared interface components
+src/server/              AI, evidence, storage, document parsing, and email
+src/lib/                 Shared types, validation, and browser helpers
+supabase/migrations/     Catalog and application-state schemas
+scripts/                 Configuration checks, imports, and verification
+docs/                    Product, deployment, design, and validation notes
+```
 
-The active implementation now separates `/explore` (interests and visible background form) from `/explore/results` (live progress, filters and results). The header switches English/Chinese. Email drafts include visible personal details, attachments, and optional AI revisions with preview/apply/undo.
+## Documentation
 
-Search reads the full stored catalog before web discovery, without a six-result display cap. The campus importer starts with the official Guide's 2,851 professor-rank appointments, enriches them from all public research-platform units, then verifies public department-profile contacts. Records with missing research remain visible in the new [/explore/faculty](http://127.0.0.1:3002/explore/faculty) directory. Research, email and openings are separate evidence checks. Shared Supabase schema, source definitions, resumable import and weekly refresh commands are in [docs/CATALOG.md](docs/CATALOG.md). The registered Sunday 03:00 Codex task runs all three stages and requires this machine and Codex to be available.
+| Guide                                                           | What it covers                                                       |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [Vercel deployment](docs/VERCEL-DEPLOYMENT.md)                  | Current production setup, storage, environment, and execution limits |
+| [Research catalog](docs/CATALOG.md)                             | Public sources, import workflow, and evidence coverage               |
+| [Outlook setup](docs/OUTLOOK-SETUP.md)                          | Microsoft app registration, authorization, and sending               |
+| [Backend reference](docs/BACKEND.md)                            | API behavior, validation, jobs, and email workflow                   |
+| [Verification record](docs/VERIFICATION.md)                     | Dated checks, deployment validation, and known boundaries            |
+| [Product requirements](docs/PRD.md) · [Design notes](DESIGN.md) | Product intent and interface decisions                               |
+
+Technical notes include dated development history; the deployment guide describes the current hosting setup.
+
+---
+
+Built for **Badger BuildFest**. An independent student project for UW–Madison, not an official university service. Project mark and design references are documented in [Brand asset](docs/BRAND-ASSET.md) and [Design notes](DESIGN.md).
