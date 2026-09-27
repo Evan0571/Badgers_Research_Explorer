@@ -283,7 +283,7 @@ export function UndergraduateContactOptions({
                     : s.kind === "opportunities"
                       ? t("Opportunities / instructions ↗", "机会与申请说明 ↗")
                       : s.kind === "team"
-                        ? t("Research team ↗", "研究团队 ↗")
+                        ? t("People / team page ↗", "人员或团队介绍 ↗")
                         : t("University profile ↗", "学校主页 ↗")}
               </a>
             ))}

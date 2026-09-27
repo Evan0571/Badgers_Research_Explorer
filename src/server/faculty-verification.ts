@@ -386,25 +386,42 @@ export async function collectFacultyPages(
 
 export function evidenceWindow(doc: SourceDocument) {
   if (doc.text.length <= 16000) return doc.text;
-  const intervals: [[number, number], ...[number, number][]] = [[0, 4000]];
-  for (const match of doc.text.matchAll(
+  const merge = (ranges: [number, number][]) => {
+    const merged: [number, number][] = [];
+    for (const range of [...ranges].sort((a, b) => a[0] - b[0])) {
+      const last = merged.at(-1);
+      if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+      else merged.push([...range]);
+    }
+    return merged;
+  };
+  const render = (ranges: [number, number][]) =>
+    ranges
+      .map(([start, end]) => doc.text.slice(start, end))
+      .join("\n[section omitted]\n");
+  const candidates = [
+    /\bresearch (?:interests?|areas?|focus|overview)\b|\b(?:my|her|his|our) research\b|\bI (?:study|work on|speciali[sz]e)\b|\bspeciali[sz](?:es|ation|ing) (?:in|on)\b|研究方向|研究兴趣/gi,
     /undergrad|bachelor|prospective|recruit|join us|join the|opening|full capacity|research credit|paid position/gi,
-  ))
-    intervals.push([
-      Math.max(0, match.index - 450),
-      Math.min(doc.text.length, match.index + 1400),
-    ]);
-  intervals.sort((a, b) => a[0] - b[0]);
-  const merged: [number, number][] = [];
-  for (const range of intervals) {
-    const last = merged.at(-1);
-    if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
-    else merged.push([...range]);
+  ].map((pattern) =>
+    [...doc.text.matchAll(pattern)].map(
+      (match) =>
+        [
+          Math.max(0, match.index - 450),
+          Math.min(doc.text.length, match.index + 1400),
+        ] as [number, number],
+    ),
+  );
+  let selected: [number, number][] = [[0, 4000]];
+  // Alternate the two evidence categories before restoring document order.
+  // Otherwise a long recruitment section can crowd a later research bio out.
+  for (let i = 0; i < Math.max(...candidates.map((c) => c.length)); i++) {
+    for (const category of candidates) {
+      if (!category[i]) continue;
+      const next = merge([...selected, category[i]]);
+      if (render(next).length <= 20000) selected = next;
+    }
   }
-  return merged
-    .map(([start, end]) => doc.text.slice(start, end))
-    .join("\n[section omitted]\n")
-    .slice(0, 20000);
+  return render(selected);
 }
 
 export async function extractFacultyReview(
@@ -615,7 +632,7 @@ export function buildFacultyReview(
     );
   if (pages.documents.some((d) => evidenceWindow(d).length < d.text.length))
     limitations.push(
-      "Long pages were reviewed using sections relevant to identity and undergraduate research.",
+      "Long pages were reviewed using sections relevant to identity, research interests and undergraduate opportunities.",
     );
   const evidenceDate = pages.documents.map((d) => d.checkedAt).sort()[0] || now;
   const review: UndergraduateReview = {
@@ -688,14 +705,30 @@ export function buildFacultyReview(
     const p = raw.profile;
     updated = {
       ...updated,
-      ...(p.title && p.summary && p.summaryZh
+      ...(p.title.trim() ? { title: p.title.trim() } : {}),
+      // Keep translations together, but do not discard sourced keywords just
+      // because a title or one summary was omitted by the extraction model.
+      ...(p.summary.trim() && p.summaryZh.trim()
         ? {
-            title: p.title,
             summary: p.summary,
             summaryZh: p.summaryZh,
-            keywords: [...new Set([...p.keywords, ...r.keywords])],
           }
         : {}),
+      keywords: [
+        ...new Set([
+          ...p.keywords.map((k) => k.trim()).filter(Boolean),
+          ...r.keywords,
+        ]),
+      ],
+      sources: updated.sources.map((source) =>
+        source.id === p.sourceId
+          ? {
+              ...source,
+              excerpt: p.quote,
+              note: "Public page checked for research interests and independent undergraduate opportunities; the excerpt supports the research profile.",
+            }
+          : source,
+      ),
       ...(p.academicTitle &&
       p.quote.toLowerCase().includes(p.academicTitle.toLowerCase())
         ? { academicTitle: p.academicTitle }

@@ -3,6 +3,7 @@ import { researchers } from "@/data/researchers";
 import { unknownOpportunity, type OpportunityFact } from "@/lib/undergraduate";
 import {
   buildFacultyReview,
+  evidenceWindow,
   followableLink,
   validateFact,
   nameMatches,
@@ -214,5 +215,94 @@ describe("independent undergraduate findings", () => {
     expect(
       followableLink(doc, { url: "https://forms.gle/example", label: "Apply" }),
     ).toBe(false);
+  });
+  it("keeps sourced research keywords when a translated summary is missing", () => {
+    const researchQuote =
+      "My research interests include classical Chinese literature and ghost stories.";
+    const researchDoc = { ...doc, text: doc.text + " " + researchQuote };
+    const raw = extraction();
+    raw.profile = {
+      academicTitle: "Distinguished Professor",
+      title: "",
+      summary: "Classical Chinese literature and ghost stories.",
+      summaryZh: "",
+      keywords: ["classical Chinese literature", "ghost stories", "  "],
+      sourceId: doc.id,
+      quote: researchQuote,
+    };
+    const result = buildFacultyReview(
+      person,
+      { ...pages, documents: [researchDoc] },
+      raw,
+      true,
+    );
+    expect(result.keywords).toContain("classical Chinese literature");
+    expect(result.keywords).toContain(person.keywords[0]);
+    expect(result.keywords).not.toContain("");
+    expect(result.summary).toBe(person.summary);
+    expect(result.summaryZh).toBe(person.summaryZh);
+    expect(result.title).toBe(person.title);
+    expect(result.academicTitle).toBe(person.academicTitle);
+    expect(result.sources.find((s) => s.id === doc.id)?.excerpt).toBe(
+      researchQuote,
+    );
+  });
+  it("does not accept research enrichment without a real source quote or matching identity", () => {
+    const raw = extraction();
+    raw.profile = {
+      ...raw.profile,
+      title: "Invented topic",
+      summary: "Invented research",
+      summaryZh: "Invented translation",
+      keywords: ["invented"],
+      sourceId: doc.id,
+      quote: "Not present in the source",
+    };
+    expect(buildFacultyReview(person, pages, raw, true).keywords).toEqual(
+      person.keywords,
+    );
+    raw.profile.quote = doc.text;
+    raw.identity.verified = false;
+    expect(buildFacultyReview(person, pages, raw, true).keywords).toEqual(
+      person.keywords,
+    );
+  });
+});
+
+describe("long faculty source excerpts", () => {
+  it("leaves short source documents intact", () => {
+    expect(evidenceWindow(doc)).toBe(doc.text);
+  });
+  it("keeps late research interests as well as early recruitment evidence within the budget", () => {
+    const lateResearch =
+      "Research interests: classical Chinese literature, ghost stories and Ming dynasty narratives.";
+    const text =
+      doc.text +
+      " ".repeat(4000) +
+      (
+        "Undergraduate application instructions. " +
+        "x".repeat(2300) +
+        "\n"
+      ).repeat(20) +
+      lateResearch;
+    const excerpt = evidenceWindow({ ...doc, text });
+    expect(excerpt).toContain(lateResearch);
+    expect(excerpt).toContain("no undergraduate openings");
+    expect(excerpt).toContain("Undergraduate application instructions.");
+    expect(excerpt.length).toBeLessThanOrEqual(20000);
+  });
+  it("keeps late opening restrictions even with many earlier research sections", () => {
+    const text =
+      "Jane Smith at UW-Madison. " +
+      (
+        "Research interests: language acquisition. " +
+        "x".repeat(2300) +
+        "\n"
+      ).repeat(20) +
+      "Our lab is at full capacity; no undergraduate openings.";
+    const excerpt = evidenceWindow({ ...doc, text });
+    expect(excerpt).toContain("Research interests: language acquisition.");
+    expect(excerpt).toContain("no undergraduate openings.");
+    expect(excerpt.length).toBeLessThanOrEqual(20000);
   });
 });
