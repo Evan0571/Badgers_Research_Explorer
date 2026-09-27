@@ -7,6 +7,8 @@ import {
   BookOpen,
   Check,
   EnvelopeSimple,
+  GitBranch,
+  GithubLogo,
   List,
   MagnifyingGlass,
   Scales,
@@ -16,8 +18,9 @@ import { Badge, Brand, IconButton, LinkButton, ThemeToggle } from "./ui";
 import { LanguageToggle, useLocale } from "./locale";
 import { ResearcherDialog } from "./explorer/researcher-dialog";
 import { BrandMark } from "./ui/brand-mark";
+import { GITHUB_REPOSITORY_URL } from "@/lib/brand";
 
-export default function Landing() {
+export default function Landing({ commitSha }: { commitSha?: string }) {
   const { t } = useLocale();
   const [exampleOpen, setExampleOpen] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -390,6 +393,38 @@ export default function Landing() {
               {t("UW research guide", "UW 研究入门指南")}{" "}
               <ArrowUpRight size={14} />
             </a>
+            <div className="source-links">
+              <a
+                className="source-link"
+                href={GITHUB_REPOSITORY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={t(
+                  "GitHub repository (opens in a new tab)",
+                  "GitHub 代码仓库（在新标签页打开）",
+                )}
+              >
+                <GithubLogo size={17} aria-hidden="true" />
+                GitHub
+                <ArrowUpRight size={12} aria-hidden="true" />
+              </a>
+              {commitSha && (
+                <a
+                  className="source-link source-revision"
+                  href={`${GITHUB_REPOSITORY_URL}/commit/${commitSha}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={t(
+                    `View rev ${commitSha.slice(0, 7)} on GitHub (opens in a new tab)`,
+                    `查看 rev ${commitSha.slice(0, 7)} 的 GitHub 提交（在新标签页打开）`,
+                  )}
+                  title={t("Source for this deployment", "当前部署的源代码")}
+                >
+                  <GitBranch size={16} aria-hidden="true" />
+                  <span>rev {commitSha.slice(0, 7)}</span>
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </footer>

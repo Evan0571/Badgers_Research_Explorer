@@ -52,8 +52,11 @@ npm run typecheck
 npm test
 npm run build
 npx tsx scripts/check-cloud-database.ts
-npx vercel deploy --prod --yes --scope evan0571s-projects
+$sourceCommit = git rev-parse HEAD
+npx vercel deploy --prod --yes --scope evan0571s-projects --build-env "SOURCE_COMMIT_SHA=$sourceCommit"
 ```
+
+Deploy committed code so the homepage footer's revision link identifies the exact source being published. `SOURCE_COMMIT_SHA` is a public commit identifier captured during the build; Git-triggered builds can instead use Vercel's `VERCEL_GIT_COMMIT_SHA`. If neither contains a valid full commit SHA, the footer still links to the repository and omits the revision badge.
 
 The cloud check creates a unique synthetic test namespace, verifies cross-process rate limits, rollback, one-time verification, persisted jobs, batch idempotency, single-worker submission claims, and reconnect persistence, then removes only its own test records. Its sender is simulated; it never sends real emails or calls OpenAI.
 

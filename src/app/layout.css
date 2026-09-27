@@ -163,6 +163,29 @@
 .site-footer a {
   min-height: 44px;
 }
+.source-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.site-footer .source-link {
+  min-height: 36px;
+  padding: 0 11px;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--on-dark) 24%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--on-dark) 7%, transparent);
+  color: var(--on-dark);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.site-footer .source-link:hover {
+  background: color-mix(in srgb, var(--on-dark) 15%, transparent);
+}
+.source-revision span {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
 
 /* Restore the workspace's navigation rail and content bounds. */
 .app-frame {
