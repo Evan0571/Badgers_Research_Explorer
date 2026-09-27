@@ -17,15 +17,16 @@ export async function POST(request: Request) {
       z.object({ id: z.string().uuid(), confirmed: z.literal(true) }),
     );
     configuredOutlookSender(user);
-    rateLimit(`retry:${user.id}`, 10, 3600000);
-    const batchId = resumeDelivery(user, input.id);
-    after(() =>
-      processBatch(
-        batchId,
-        outlookSender(user.id),
-        checkContactBeforeSending,
-        input.id,
-      ),
+    await rateLimit(`retry:${user.id}`, 10, 3600000);
+    const batchId = await resumeDelivery(user, input.id);
+    after(
+      async () =>
+        await processBatch(
+          batchId,
+          outlookSender(user.id),
+          checkContactBeforeSending,
+          input.id,
+        ),
     );
     return json({ batchId }, 202);
   } catch (error) {

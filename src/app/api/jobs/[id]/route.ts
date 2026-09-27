@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const user = await session(false);
-    return json(getJob((await context.params).id, user.id));
+    return json(await getJob((await context.params).id, user.id));
   } catch (error) {
     return failure(error);
   }
@@ -20,7 +20,7 @@ export async function DELETE(
   try {
     checkOrigin(request);
     const user = await session(false);
-    return json(stopJob((await context.params).id, user.id));
+    return json(await stopJob((await context.params).id, user.id));
   } catch (error) {
     return failure(error);
   }

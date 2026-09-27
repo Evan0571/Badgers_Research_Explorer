@@ -6,23 +6,27 @@ import { outlookSender } from "@/server/outlook-mailer";
 import { configuredOutlookSender } from "@/server/outlook";
 import { checkContactBeforeSending } from "@/server/contact-check";
 export const runtime = "nodejs";
-export const maxDuration = 600;
+export const maxDuration = 300;
 export async function POST(request: Request) {
+  const startBefore = Date.now() + 60_000;
   try {
     checkOrigin(request);
     const user = await session(false);
-    const input = await jsonBody(request, batchInputSchema, 10 * 1024 * 1024);
+    const input = await jsonBody(request, batchInputSchema, 4 * 1024 * 1024);
     const sender = configuredOutlookSender(user);
-    rateLimit(`send:${user.id}`, 10, 3600000);
-    rateLimit("send:global", 100, 3600000);
-    const batch = freezeBatch(user, input, sender);
+    await rateLimit(`send:${user.id}`, 10, 3600000);
+    await rateLimit("send:global", 100, 3600000);
+    const batch = await freezeBatch(user, input, sender);
     if (!batch.existing)
-      after(() =>
-        processBatch(
-          batch.id,
-          outlookSender(user.id),
-          checkContactBeforeSending,
-        ),
+      after(
+        async () =>
+          await processBatch(
+            batch.id,
+            outlookSender(user.id),
+            checkContactBeforeSending,
+            undefined,
+            startBefore,
+          ),
       );
     return json({ batchId: batch.id, existing: batch.existing }, 202);
   } catch (error) {

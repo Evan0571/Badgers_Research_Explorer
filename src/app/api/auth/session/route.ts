@@ -26,13 +26,15 @@ export async function DELETE(request: Request) {
   try {
     checkOrigin(request);
     const user = await session(false);
-    db()
+    await db()
       .prepare(
         "UPDATE sessions SET verified_email=NULL,verified_at=NULL,email=NULL,account_id=NULL,tokens=NULL,oauth=NULL WHERE id=?",
       )
       .run(user.id);
-    db().prepare("DELETE FROM challenges WHERE session_id=?").run(user.id);
-    db()
+    await db()
+      .prepare("DELETE FROM challenges WHERE session_id=?")
+      .run(user.id);
+    await db()
       .prepare(
         "UPDATE deliveries SET state='cancelled',updated_at=? WHERE session_id=? AND state='queued'",
       )

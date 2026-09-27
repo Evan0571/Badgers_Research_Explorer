@@ -24,13 +24,13 @@ export async function requestCode(user: Session, rawEmail: string) {
       "Email verification is not configured on this server yet.",
       503,
     );
-  rateLimit(`code:session:${user.id}`, 5, 3600000);
-  rateLimit(`code:email:${digest(email)}`, 5, 3600000);
-  rateLimit(`code:cooldown:${user.id}`, 1, 60000);
-  rateLimit("code:global", 100, 3600000);
+  await rateLimit(`code:session:${user.id}`, 5, 3600000);
+  await rateLimit(`code:email:${digest(email)}`, 5, 3600000);
+  await rateLimit(`code:cooldown:${user.id}`, 1, 60000);
+  await rateLimit("code:global", 100, 3600000);
   const code = String(randomInt(100000, 1000000));
   const challengeDigest = codeDigest(user.id, email, code);
-  db()
+  await db()
     .prepare(
       "INSERT INTO challenges(session_id,email,digest,expires,attempts) VALUES(?,?,?,?,0) ON CONFLICT(session_id) DO UPDATE SET email=excluded.email,digest=excluded.digest,expires=excluded.expires,attempts=0",
     )
@@ -54,7 +54,7 @@ export async function requestCode(user: Session, rawEmail: string) {
     });
     if (!sent.ok) throw new Error("Email rejected");
   } catch {
-    db()
+    await db()
       .prepare("DELETE FROM challenges WHERE session_id=? AND digest=?")
       .run(user.id, challengeDigest);
     throw new AppError(
@@ -65,11 +65,11 @@ export async function requestCode(user: Session, rawEmail: string) {
   }
   return { sent: true, expiresIn: 600 };
 }
-export function verifyCode(user: Session, code: string) {
-  return transaction(() => {
-    const challenge = db()
+export async function verifyCode(user: Session, code: string) {
+  return await transaction(async () => {
+    const challenge = (await db()
       .prepare("SELECT * FROM challenges WHERE session_id=?")
-      .get(user.id) as
+      .get(user.id)) as
       | { email: string; digest: string; expires: number; attempts: number }
       | undefined;
     if (!challenge || challenge.expires < Date.now() || challenge.attempts >= 5)
@@ -84,12 +84,12 @@ export function verifyCode(user: Session, code: string) {
       expected = Buffer.from(challenge.digest, "hex");
     if (!timingSafeEqual(actual, expected)) {
       // Return instead of throwing so the failed attempt is committed.
-      db()
+      await db()
         .prepare("UPDATE challenges SET attempts=attempts+1 WHERE session_id=?")
         .run(user.id);
       return { verified: false as const };
     }
-    db()
+    await db()
       .prepare(
         "UPDATE sessions SET verified_email=?,verified_at=?,email=?,account_id=?,tokens=NULL,oauth=NULL WHERE id=?",
       )
@@ -100,7 +100,9 @@ export function verifyCode(user: Session, code: string) {
         digest(challenge.email),
         user.id,
       );
-    db().prepare("DELETE FROM challenges WHERE session_id=?").run(user.id);
+    await db()
+      .prepare("DELETE FROM challenges WHERE session_id=?")
+      .run(user.id);
     return { verified: true as const, email: challenge.email };
   });
 }

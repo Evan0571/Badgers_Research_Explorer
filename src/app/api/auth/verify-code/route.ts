@@ -7,12 +7,12 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const user = await session(false);
-    rateLimit(`verify:${user.id}`, 30, 3600000);
+    await rateLimit(`verify:${user.id}`, 30, 3600000);
     const input = await jsonBody(
       request,
       z.object({ code: z.string().regex(/^\d{6}$/) }),
     );
-    const result = verifyCode(user, input.code);
+    const result = await verifyCode(user, input.code);
     if (!result.verified)
       throw new AppError(
         "CODE_INVALID",

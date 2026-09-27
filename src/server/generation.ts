@@ -11,15 +11,15 @@ export async function generateDrafts(
   ids: string[],
   background: Background,
   query: string,
-  progress: (stage: string, partial?: unknown) => void,
+  progress: (stage: string, partial?: unknown) => void | Promise<void>,
 ) {
   const drafts: Draft[] = [],
     errors: { researcherId: string; error: string }[] = [];
   const uniqueIds = [...new Set(ids)];
   for (const [index, id] of uniqueIds.entries()) {
-    progress(`Preparing draft ${index + 1} of ${uniqueIds.length}`);
+    await progress(`Preparing draft ${index + 1} of ${uniqueIds.length}`);
     try {
-      const researcher = storedResearcher(id);
+      const researcher = await storedResearcher(id);
       if (!canEmail(researcher))
         throw new AppError(
           "CONTACT_ROUTE",
@@ -48,10 +48,13 @@ export async function generateDrafts(
         return null;
       });
       if (!generated) {
-        progress(`Prepared ${drafts.length} drafts; ${errors.length} failed`, {
-          drafts,
-          errors,
-        });
+        await progress(
+          `Prepared ${drafts.length} drafts; ${errors.length} failed`,
+          {
+            drafts,
+            errors,
+          },
+        );
         continue;
       }
       if (
@@ -89,10 +92,13 @@ export async function generateDrafts(
             : "This draft could not be generated. Please retry it.",
       });
     }
-    progress(`Prepared ${drafts.length} drafts; ${errors.length} failed`, {
-      drafts,
-      errors,
-    });
+    await progress(
+      `Prepared ${drafts.length} drafts; ${errors.length} failed`,
+      {
+        drafts,
+        errors,
+      },
+    );
   }
   return { drafts, errors };
 }

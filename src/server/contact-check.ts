@@ -8,7 +8,7 @@ import { AppError } from "./http";
 
 // Run before claiming a queued message. Failure here is a known non-submission.
 export async function checkContactBeforeSending(draft: Draft) {
-  const researcher = storedResearcher(draft.researcherId);
+  const researcher = await storedResearcher(draft.researcherId);
   const affiliation = researcher.sources.find((s) => isUniversityURL(s.url));
   const contact = researcher.sources.find(
     (s) => s.id === researcher.contact.sourceId,

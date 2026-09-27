@@ -58,10 +58,10 @@ function client(tenant = config().microsoftTenant) {
   });
 }
 
-export function currentSession(id: string): Session {
-  const user = db()
+export async function currentSession(id: string): Promise<Session> {
+  const user = (await db()
     .prepare("SELECT * FROM sessions WHERE id=? AND expires>?")
-    .get(id, Date.now()) as Session | undefined;
+    .get(id, Date.now())) as unknown as Session | undefined;
   if (!user)
     throw new AppError(
       "SESSION",
@@ -152,7 +152,7 @@ export async function beginOutlookAuthorization(user: Session) {
     prompt: "select_account",
     loginHint: identity.email,
   });
-  const saved = db()
+  const saved = await db()
     .prepare(
       "UPDATE sessions SET oauth=? WHERE id=? AND verified_email=? AND verified_at=? AND expires>?",
     )
@@ -166,7 +166,7 @@ export async function beginOutlookAuthorization(user: Session) {
   return url;
 }
 
-function claimAuthorization(user: Session, state: string) {
+async function claimAuthorization(user: Session, state: string) {
   const identity = verifiedIdentity(user);
   let pending: PendingAuthorization;
   try {
@@ -194,7 +194,7 @@ function claimAuthorization(user: Session, state: string) {
       400,
     );
   const marker = seal({ processing: randomUUID() });
-  const claimed = db()
+  const claimed = await db()
     .prepare("UPDATE sessions SET oauth=? WHERE id=? AND oauth=?")
     .run(marker, user.id, user.oauth);
   if (!claimed.changes)
@@ -246,7 +246,7 @@ export async function completeOutlookAuthorization(
   user: Session,
   input: { state: string; code?: string; error?: string },
 ) {
-  const { pending, marker } = claimAuthorization(user, input.state);
+  const { pending, marker } = await claimAuthorization(user, input.state);
   try {
     if (input.error)
       throw new AppError(
@@ -294,7 +294,7 @@ export async function completeOutlookAuthorization(
       email: profile.email,
       connectionId: randomUUID(),
     };
-    const updated = db()
+    const updated = await db()
       .prepare(
         "UPDATE sessions SET tokens=?,oauth=NULL WHERE id=? AND oauth=? AND verified_email=? AND verified_at=? AND expires>?",
       )
@@ -313,24 +313,27 @@ export async function completeOutlookAuthorization(
         409,
       );
   } finally {
-    db()
+    await db()
       .prepare("UPDATE sessions SET oauth=NULL WHERE id=? AND oauth=?")
       .run(user.id, marker);
   }
 }
 
-export function disconnectOutlook(user: Session, expectedTokens?: string) {
-  return transaction(() => {
+export async function disconnectOutlook(
+  user: Session,
+  expectedTokens?: string,
+) {
+  return await transaction(async () => {
     const result =
       expectedTokens === undefined
-        ? db()
+        ? await db()
             .prepare("UPDATE sessions SET tokens=NULL,oauth=NULL WHERE id=?")
             .run(user.id)
-        : db()
+        : await db()
             .prepare("UPDATE sessions SET tokens=NULL WHERE id=? AND tokens=?")
             .run(user.id, expectedTokens);
     if (result.changes)
-      db()
+      await db()
         .prepare(
           "UPDATE deliveries SET state='cancelled',error='Outlook was disconnected. Review a new batch after reconnecting.',updated_at=? WHERE session_id=? AND state='queued'",
         )
@@ -360,7 +363,7 @@ async function locked<T>(id: string, work: () => Promise<T>): Promise<T> {
 
 export function outlookAccess(id: string, expectedEmail: string) {
   return locked(id, async () => {
-    const user = currentSession(id);
+    const user = await currentSession(id);
     const linked = connection(user);
     if (linked.email !== expectedEmail)
       throw new AppError(
@@ -384,7 +387,7 @@ export function outlookAccess(id: string, expectedEmail: string) {
       result = await app.acquireTokenSilent({ account, scopes: outlookScopes });
     } catch (error) {
       if (error instanceof InteractionRequiredAuthError)
-        disconnectOutlook(user, user.tokens!);
+        await disconnectOutlook(user, user.tokens!);
       throw new AppError(
         "OUTLOOK_RECONNECT",
         "Microsoft could not authorize this send. Reconnect Outlook and review the message again.",
@@ -404,7 +407,7 @@ export function outlookAccess(id: string, expectedEmail: string) {
       );
     const profile = await readProfile(result.accessToken);
     if (profile.id !== linked.objectId || profile.email !== expectedEmail) {
-      disconnectOutlook(user, user.tokens!);
+      await disconnectOutlook(user, user.tokens!);
       throw new AppError(
         "OUTLOOK_MISMATCH",
         "Your Outlook mailbox changed. Verify its primary address and connect it again.",
@@ -412,7 +415,7 @@ export function outlookAccess(id: string, expectedEmail: string) {
       );
     }
     const tokens = seal({ ...linked, cache: app.getTokenCache().serialize() });
-    const updated = db()
+    const updated = await db()
       .prepare(
         "UPDATE sessions SET tokens=? WHERE id=? AND tokens=? AND verified_email=? AND verified_at=? AND expires>?",
       )
@@ -438,12 +441,12 @@ export function outlookAccess(id: string, expectedEmail: string) {
   });
 }
 
-export function assertOutlookConnection(
+export async function assertOutlookConnection(
   id: string,
   email: string,
   connectionId: string,
 ) {
-  const linked = connection(currentSession(id));
+  const linked = connection(await currentSession(id));
   if (linked.email !== email || linked.connectionId !== connectionId)
     throw new AppError(
       "OUTLOOK_STATE",

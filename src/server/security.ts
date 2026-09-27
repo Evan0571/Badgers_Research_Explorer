@@ -27,9 +27,9 @@ export async function session(create = true): Promise<Session> {
   const raw = jar.get("research_session")?.value;
   const current =
     raw &&
-    (db()
+    ((await db()
       .prepare("SELECT * FROM sessions WHERE id=? AND expires>?")
-      .get(digest(raw), Date.now()) as Session | undefined);
+      .get(digest(raw), Date.now())) as unknown as Session | undefined);
   if (current) return current;
   if (!create)
     throw new AppError(
@@ -40,7 +40,9 @@ export async function session(create = true): Promise<Session> {
   const token = randomBytes(32).toString("base64url");
   const id = digest(token),
     expires = Date.now() + 30 * 86400_000;
-  db().prepare("INSERT INTO sessions(id,expires) VALUES(?,?)").run(id, expires);
+  await db()
+    .prepare("INSERT INTO sessions(id,expires) VALUES(?,?)")
+    .run(id, expires);
   jar.set("research_session", token, {
     httpOnly: true,
     sameSite: "lax",
@@ -48,23 +50,23 @@ export async function session(create = true): Promise<Session> {
     path: "/",
     maxAge: 30 * 86400,
   });
-  return db()
+  return (await db()
     .prepare("SELECT * FROM sessions WHERE id=?")
-    .get(id) as unknown as Session;
+    .get(id)) as unknown as Session;
 }
-export function rateLimit(key: string, max: number, periodMs: number) {
-  transaction(() => {
+export async function rateLimit(key: string, max: number, periodMs: number) {
+  await transaction(async () => {
     const now = Date.now();
-    const current = db()
+    const current = (await db()
       .prepare("SELECT started,count FROM limits WHERE key=?")
-      .get(key) as { started: number; count: number } | undefined;
+      .get(key)) as { started: number; count: number } | undefined;
     if (current && current.started + periodMs > now && current.count >= max)
       throw new AppError(
         "RATE_LIMIT",
         `Too many requests. Try again in ${Math.ceil((current.started + periodMs - now) / 60000)} minutes. You can still browse the catalog and use saved results.`,
         429,
       );
-    db()
+    await db()
       .prepare(
         "INSERT INTO limits(key,started,count) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET started=excluded.started,count=?",
       )

@@ -135,9 +135,9 @@ describe("shared catalog persistence", () => {
     );
     const result = await loadCatalog();
     expect(result.records.map((r) => r.id)).toEqual(["canonical"]);
-    expect(localCatalog().some((r) => r.id === "alias")).toBe(false);
+    expect((await localCatalog()).some((r) => r.id === "alias")).toBe(false);
     expect(
-      db().prepare("SELECT id FROM researchers WHERE id='alias'").get(),
+      await db().prepare("SELECT id FROM researchers WHERE id='alias'").get(),
     ).toBeTruthy();
   });
   it("shares one production catalog read across simultaneous requests", async () => {
@@ -170,9 +170,9 @@ describe("shared catalog persistence", () => {
     expect(result.shared).toBe(true);
     expect(fetcher.mock.calls[1][0]).toContain("offset=500");
   });
-  it("does not turn a cached database read into a fresh source check", () => {
+  it("does not turn a cached database read into a fresh source check", async () => {
     const date = "2020-01-01T00:00:00.000Z";
-    mirrorResearchers([
+    await mirrorResearchers([
       {
         ...fixture,
         id: "stale",
@@ -181,9 +181,9 @@ describe("shared catalog persistence", () => {
     ]);
     expect(
       (
-        db()
+        (await db()
           .prepare("SELECT checked_at FROM researchers WHERE id='stale'")
-          .get() as { checked_at: number }
+          .get()) as { checked_at: number }
       ).checked_at,
     ).toBe(Date.parse(date));
   });
@@ -194,7 +194,7 @@ describe("shared catalog persistence", () => {
     const result = await loadCatalog();
     expect(result.shared).toBe(false);
     expect(result.warning).toMatch(/could not be reached/);
-    expect(result.records.length).toBe(localCatalog().length);
+    expect(result.records.length).toBe((await localCatalog()).length);
   });
 });
 
@@ -212,9 +212,9 @@ describe("catalog search coverage", () => {
       keywords: ["quasar interpolation"],
       topics: [],
     }));
-    mirrorResearchers(records);
+    await mirrorResearchers(records);
     const query = "quasar interpolation";
-    db()
+    await db()
       .prepare("INSERT INTO search_cache(key,payload,expires) VALUES(?,?,?)")
       .run(
         digest("catalog-plan-v4:" + query),
@@ -230,7 +230,7 @@ describe("catalog search coverage", () => {
     vi.stubGlobal("fetch", api);
     const result = await searchCatalog(query, () => {});
     expect(result.researchers).toHaveLength(31);
-    mirrorResearchers([
+    await mirrorResearchers([
       { ...records[0], id: "coverage-later", name: "Later Researcher" },
     ]);
     const again = await searchCatalog(query, () => {});

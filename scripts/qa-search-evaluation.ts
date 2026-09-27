@@ -32,7 +32,8 @@ const { searchCatalog } = await import("../src/server/catalog-search");
 const insert = db().prepare(
   "INSERT INTO researchers(id,payload,checked_at) VALUES(?,?,?)",
 );
-for (const row of publicRows) insert.run(row.id, row.payload, row.checked_at);
+for (const row of publicRows)
+  await insert.run(row.id, row.payload, row.checked_at);
 const scenarios = [
   [
     "cross-major",
@@ -113,7 +114,7 @@ for (const [id, query] of scenarios) {
   const started = Date.now();
   try {
     const result = await searchCatalog(query, () => {});
-    const cached = db()
+    const cached = await db()
       .prepare("SELECT payload FROM search_cache ORDER BY rowid DESC LIMIT 1")
       .get();
     const row = {

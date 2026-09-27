@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const user = await session();
-    rateLimit(`resume:${user.id}`, 10, 3600000);
+    await rateLimit(`resume:${user.id}`, 10, 3600000);
     const { text } = await jsonBody(
       request,
       z.object({ text: z.string().min(20).max(50000) }),

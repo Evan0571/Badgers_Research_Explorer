@@ -9,8 +9,8 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const user = await session();
-    rateLimit("polish:" + user.id, 20, 3600000);
-    rateLimit("polish:global", 200, 3600000);
+    await rateLimit("polish:" + user.id, 20, 3600000);
+    await rateLimit("polish:global", 200, 3600000);
     const { draft, instruction } = await jsonBody(
       request,
       z.object({

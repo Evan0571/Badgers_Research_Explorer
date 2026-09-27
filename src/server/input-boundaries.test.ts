@@ -40,9 +40,9 @@ beforeAll(() => {
     "db.sqlite",
   );
 });
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
-  db().exec("DELETE FROM search_cache; DELETE FROM jobs;");
+  await db().exec("DELETE FROM search_cache; DELETE FROM jobs;");
   vi.mocked(loadCatalog).mockResolvedValue({
     records: [researchers[0]],
     shared: false,
@@ -199,7 +199,7 @@ describe("search input boundaries", () => {
     );
     expect(discoverLive).not.toHaveBeenCalled();
     expect(
-      db().prepare("SELECT count(*) AS n FROM search_cache").get(),
+      await db().prepare("SELECT count(*) AS n FROM search_cache").get(),
     ).toMatchObject({ n: 0 });
   });
   it("does not guess a complex intent or drop exclusions during an AI outage", async () => {
@@ -220,7 +220,7 @@ describe("search input boundaries", () => {
 
 describe("editable drafts during AI outages", () => {
   beforeEach(() => {
-    vi.mocked(storedResearcher).mockReturnValue(researchers[0]);
+    vi.mocked(storedResearcher).mockResolvedValue(researchers[0]);
     vi.mocked(structured).mockRejectedValue(
       new AppError("AI_PROVIDER", "credit_balance_exhausted", 502),
     );
@@ -247,7 +247,7 @@ describe("editable drafts during AI outages", () => {
     expect(result.drafts[0].body).not.toContain("interested in professor");
   });
   it("does not use fallback templates to bypass the contact route", async () => {
-    vi.mocked(storedResearcher).mockReturnValue({
+    vi.mocked(storedResearcher).mockResolvedValue({
       ...researchers[0],
       contact: { ...researchers[0].contact, route: "form", email: undefined },
     });
@@ -321,7 +321,7 @@ describe("bounded web discovery", () => {
     expect(result.webSearchStatus).toBe("timed-out");
     expect(result.researchers.map((r) => r.id)).toEqual([philosopher.id]);
     expect(result.cached).toBe(true);
-    expect(() => lateProgress("Late result")).toThrow();
+    await expect(lateProgress("Late result")).rejects.toThrow();
     expect(discoverLive).toHaveBeenCalledWith(
       "philosophy",
       expect.any(Function),
@@ -456,7 +456,7 @@ describe("resume recognition and grounded suggestions", () => {
 
 describe("job terminal states", () => {
   it("prevents cancelled jobs from writing late results and permits a new search", async () => {
-    const id = createJob("session-a", "search");
+    const id = await createJob("session-a", "search");
     let finish!: (value: unknown) => void;
     const run = runJob(
       id,
@@ -465,20 +465,20 @@ describe("job terminal states", () => {
           finish = resolve;
         }),
     );
-    expect(() => stopJob(id, "other-session")).toThrow();
-    stopJob(id, "session-a");
+    await expect(stopJob(id, "other-session")).rejects.toThrow();
+    await stopJob(id, "session-a");
     finish({ stale: true });
     await run;
-    expect(getJob(id, "session-a").state).toBe("failed");
-    expect(getJob(id, "session-a").result).toBeUndefined();
-    expect(createJob("session-a", "search")).not.toBe(id);
+    expect((await getJob(id, "session-a")).state).toBe("failed");
+    expect((await getJob(id, "session-a")).result).toBeUndefined();
+    expect(await createJob("session-a", "search")).not.toBe(id);
   });
   it("ends a hung task at its overall deadline even if no progress event arrives", async () => {
     vi.useFakeTimers();
-    const id = createJob("session-b", "search");
+    const id = await createJob("session-b", "search");
     const run = runJob(id, () => new Promise(() => {}));
     await vi.advanceTimersByTimeAsync(540001);
     await run;
-    expect(getJob(id, "session-b").state).toBe("failed");
+    expect((await getJob(id, "session-b")).state).toBe("failed");
   });
 });

@@ -53,8 +53,8 @@ beforeAll(() => {
   process.env.APP_ENCRYPTION_KEY = "1".repeat(64);
   process.env.APP_ORIGIN = "http://127.0.0.1:3002";
 });
-beforeEach(() => {
-  db().exec(
+beforeEach(async () => {
+  await db().exec(
     "DELETE FROM deliveries; DELETE FROM batches; DELETE FROM challenges; DELETE FROM sessions; DELETE FROM jobs; DELETE FROM limits; DELETE FROM researchers;",
   );
 });
@@ -63,30 +63,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
-it("rate limits give a bounded wait and reopen only at the original window boundary", () => {
+it("rate limits give a bounded wait and reopen only at the original window boundary", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(1000000);
-  rateLimit("qa-limit", 1, 120000);
-  expect(() => rateLimit("qa-limit", 1, 120000)).toThrow(
+  await rateLimit("qa-limit", 1, 120000);
+  await expect(rateLimit("qa-limit", 1, 120000)).rejects.toThrow(
     "Try again in 2 minutes",
   );
   vi.setSystemTime(1060001);
-  expect(() => rateLimit("qa-limit", 1, 120000)).toThrow(
+  await expect(rateLimit("qa-limit", 1, 120000)).rejects.toThrow(
     "Try again in 1 minutes",
   );
   vi.setSystemTime(1120000);
-  expect(() => rateLimit("qa-limit", 1, 120000)).not.toThrow();
+  await expect(rateLimit("qa-limit", 1, 120000)).resolves.toBeUndefined();
 });
-const user = (): Session => {
-  db()
+const user = async (): Promise<Session> => {
+  await db()
     .prepare("INSERT INTO sessions(id,expires) VALUES(?,?)")
     .run("session-a", Date.now() + 3600000);
-  return db()
+  return (await db()
     .prepare("SELECT * FROM sessions WHERE id=?")
-    .get("session-a") as unknown as Session;
+    .get("session-a")) as unknown as Session;
 };
-const challenge = (s: Session, code = "123456") => {
-  db()
+const challenge = async (s: Session, code = "123456") => {
+  await db()
     .prepare(
       "INSERT INTO challenges(session_id,email,digest,expires) VALUES(?,?,?,?)",
     )
@@ -105,17 +105,17 @@ describe("Verification and account boundaries", () => {
     expect(isUWEmail("a@wisc.edu.evil.example")).toBe(false);
     expect(isUWEmail("a@notwisc.edu")).toBe(false);
   });
-  it("consumes a valid challenge exactly once and binds the identity", () => {
-    const s = user();
-    challenge(s);
-    expect(verifyCode(s, "123456")).toEqual({
+  it("consumes a valid challenge exactly once and binds the identity", async () => {
+    const s = await user();
+    await challenge(s);
+    expect(await verifyCode(s, "123456")).toEqual({
       verified: true,
       email: "student@wisc.edu",
     });
-    expect(() => verifyCode(s, "123456")).toThrow(/expired/);
-    const current = db()
+    await expect(verifyCode(s, "123456")).rejects.toThrow(/expired/);
+    const current = (await db()
       .prepare("SELECT * FROM sessions WHERE id=?")
-      .get(s.id) as unknown as Session;
+      .get(s.id)) as unknown as Session;
     expect(verifiedIdentity(current).accountId).toBe(
       digest("student@wisc.edu"),
     );
@@ -123,21 +123,23 @@ describe("Verification and account boundaries", () => {
       verifiedIdentity({ ...current, verified_at: Date.now() - 86400001 }),
     ).toThrow(/Verify/);
   });
-  it("commits wrong-code attempts and enforces the attempt cap", () => {
-    const s = user();
-    challenge(s);
+  it("commits wrong-code attempts and enforces the attempt cap", async () => {
+    const s = await user();
+    await challenge(s);
     for (let i = 0; i < 5; i++)
-      expect(verifyCode(s, "000000").verified).toBe(false);
-    expect(() => verifyCode(s, "123456")).toThrow(/attempt limit/);
+      expect((await verifyCode(s, "000000")).verified).toBe(false);
+    await expect(verifyCode(s, "123456")).rejects.toThrow(/attempt limit/);
   });
-  it("does not accept another browser challenge or an expired code", () => {
-    const s = user();
-    challenge(s);
-    expect(() => verifyCode({ ...s, id: "other-session" }, "123456")).toThrow();
-    db()
+  it("does not accept another browser challenge or an expired code", async () => {
+    const s = await user();
+    await challenge(s);
+    await expect(
+      verifyCode({ ...s, id: "other-session" }, "123456"),
+    ).rejects.toThrow();
+    await db()
       .prepare("UPDATE challenges SET expires=?")
       .run(Date.now() - 1);
-    expect(() => verifyCode(s, "123456")).toThrow();
+    await expect(verifyCode(s, "123456")).rejects.toThrow();
   });
   it("encrypts private content and rejects altered ciphertext", () => {
     const encrypted = seal({ private: "attachment bytes" });
@@ -154,35 +156,35 @@ describe("Verification and account boundaries", () => {
 
 describe("Durable asynchronous jobs", () => {
   it("restores a completed result and hides it from another session", async () => {
-    const id = createJob("owner", "search");
+    const id = await createJob("owner", "search");
     await runJob(id, async (progress) => {
-      progress("Checking sources");
+      await progress("Checking sources");
       return { items: ["public result"] };
     });
-    expect(getJob(id, "owner")).toMatchObject({
+    expect(await getJob(id, "owner")).toMatchObject({
       state: "succeeded",
       result: { items: ["public result"] },
     });
-    expect(() => getJob(id, "other")).toThrow(/does not belong/);
+    await expect(getJob(id, "other")).rejects.toThrow(/does not belong/);
   });
-  it("reports interrupted jobs without manufacturing a successful result", () => {
-    const id = createJob("owner", "search");
-    db()
+  it("reports interrupted jobs without manufacturing a successful result", async () => {
+    const id = await createJob("owner", "search");
+    await db()
       .prepare("UPDATE jobs SET updated_at=? WHERE id=?")
       .run(Date.now() - 310000, id);
-    expect(getJob(id, "owner")).toMatchObject({ state: "failed" });
+    expect(await getJob(id, "owner")).toMatchObject({ state: "failed" });
   });
-  it("rolls back a failed transaction", () => {
-    expect(() =>
-      transaction(() => {
-        db()
+  it("rolls back a failed transaction", async () => {
+    await expect(
+      transaction(async () => {
+        await db()
           .prepare("INSERT INTO sessions(id,expires) VALUES(?,?)")
           .run("rollback", 1);
         throw new Error("interrupted");
       }),
-    ).toThrow();
+    ).rejects.toThrow();
     expect(
-      db().prepare("SELECT * FROM sessions WHERE id=?").get("rollback"),
+      await db().prepare("SELECT * FROM sessions WHERE id=?").get("rollback"),
     ).toBeUndefined();
   });
 });
@@ -397,15 +399,15 @@ describe("API contracts and truthful provider errors", () => {
   });
 });
 
-function mailFixture() {
-  let s = user();
-  challenge(s);
-  verifyCode(s, "123456");
-  s = db()
+async function mailFixture() {
+  let s = await user();
+  await challenge(s);
+  await verifyCode(s, "123456");
+  s = (await db()
     .prepare("SELECT * FROM sessions WHERE id=?")
-    .get(s.id) as unknown as Session;
+    .get(s.id)) as unknown as Session;
   const researcher = validateExtraction(extraction(), [document])[0];
-  db()
+  await db()
     .prepare("INSERT INTO researchers(id,payload,checked_at) VALUES(?,?,?)")
     .run(researcher.id, JSON.stringify(researcher), Date.now());
   const draft = makeDraft(
@@ -433,11 +435,11 @@ const mailboxFrom = "student@wisc.edu";
 
 describe("Durable per-message outbox", () => {
   it("sends to the verified owner without depending on the original professor's source", async () => {
-    const { s, input } = mailFixture();
+    const { s, input } = await mailFixture();
     input.drafts[0].to = "STUDENT@wisc.edu";
     // No client test flag or recipientEdited flag is needed to prove ownership.
-    db().prepare("DELETE FROM researchers").run();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    await db().prepare("DELETE FROM researchers").run();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const preflight = vi
       .fn()
       .mockRejectedValue(new Error("Professor source unavailable"));
@@ -449,13 +451,13 @@ describe("Durable per-message outbox", () => {
     expect(sender).toHaveBeenCalledTimes(1);
     expect(sender.mock.calls[0][0].draft.to).toBe(mailboxFrom);
     expect(sender.mock.calls[0][0].sender).toBe(mailboxFrom);
-    expect(history(s)[0].state).toBe("accepted");
+    expect((await history(s))[0].state).toBe("accepted");
   });
   it("retries an old source-blocked self-addressed snapshot without consulting professor sources", async () => {
-    const { s, input } = mailFixture();
+    const { s, input } = await mailFixture();
     input.drafts[0].to = mailboxFrom;
-    const batch = freezeBatch(s, input, mailboxFrom);
-    db()
+    const batch = await freezeBatch(s, input, mailboxFrom);
+    await db()
       .prepare(
         "UPDATE deliveries SET state='failed',error='Contact source check failed' WHERE batch_id=?",
       )
@@ -466,19 +468,19 @@ describe("Durable per-message outbox", () => {
     const preflight = vi
       .fn()
       .mockRejectedValue(new Error("Professor source unavailable"));
-    db().prepare("DELETE FROM researchers").run();
-    const record = history(s)[0];
-    expect(resumeDelivery(s, record.id)).toBe(batch.id);
+    await db().prepare("DELETE FROM researchers").run();
+    const record = (await history(s))[0];
+    expect(await resumeDelivery(s, record.id)).toBe(batch.id);
     await processBatch(batch.id, sender, preflight, record.id);
     expect(preflight).not.toHaveBeenCalled();
     expect(sender).toHaveBeenCalledTimes(1);
-    expect(history(s)[0].state).toBe("accepted");
+    expect((await history(s))[0].state).toBe("accepted");
   });
   it("does not treat another recipient as a self-test just because its address was edited", async () => {
-    const { s, input } = mailFixture();
+    const { s, input } = await mailFixture();
     input.drafts[0].to = "other@wisc.edu";
     input.drafts[0].recipientEdited = true;
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const preflight = vi
       .fn()
       .mockRejectedValue(new Error("Professor source unavailable"));
@@ -486,42 +488,46 @@ describe("Durable per-message outbox", () => {
     await processBatch(batch.id, sender, preflight);
     expect(preflight).toHaveBeenCalledTimes(1);
     expect(sender).not.toHaveBeenCalled();
-    expect(history(s)[0].state).toBe("failed");
-    db().prepare("DELETE FROM researchers").run();
-    expect(() => resumeDelivery(s, history(s)[0].id)).toThrow();
-    expect(() =>
+    expect((await history(s))[0].state).toBe("failed");
+    await db().prepare("DELETE FROM researchers").run();
+    await expect(resumeDelivery(s, (await history(s))[0].id)).rejects.toThrow();
+    await expect(
       freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, mailboxFrom),
-    ).toThrow();
+    ).rejects.toThrow();
   });
   it("still checks verification and sender identity for a self-addressed test", async () => {
-    const { s, input } = mailFixture();
+    const { s, input } = await mailFixture();
     input.drafts[0].to = mailboxFrom;
-    expect(() =>
+    await expect(
       freezeBatch(s, { ...input, senderEmail: "other@wisc.edu" }, mailboxFrom),
-    ).toThrow(/sender no longer matches/);
-    const batch = freezeBatch(s, input, mailboxFrom);
-    db().prepare("UPDATE sessions SET verified_at=NULL WHERE id=?").run(s.id);
+    ).rejects.toThrow(/sender no longer matches/);
+    const batch = await freezeBatch(s, input, mailboxFrom);
+    await db()
+      .prepare("UPDATE sessions SET verified_at=NULL WHERE id=?")
+      .run(s.id);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, vi.fn());
     expect(sender).not.toHaveBeenCalled();
     expect(
-      db()
-        .prepare("SELECT state FROM deliveries WHERE batch_id=?")
-        .get(batch.id)?.state,
+      (
+        await db()
+          .prepare("SELECT state FROM deliveries WHERE batch_id=?")
+          .get(batch.id)
+      )?.state,
     ).toBe("cancelled");
   });
-  it("rejects a forged or stale sender before creating any delivery", () => {
-    const { s, input } = mailFixture();
-    expect(() =>
+  it("rejects a forged or stale sender before creating any delivery", async () => {
+    const { s, input } = await mailFixture();
+    await expect(
       freezeBatch(s, { ...input, senderEmail: "other@wisc.edu" }, mailboxFrom),
-    ).toThrow(/sender no longer matches/);
-    expect(() => freezeBatch(s, input, "platform@example.test")).toThrow(
-      /sender no longer matches/,
-    );
-    expect(history(s)).toEqual([]);
+    ).rejects.toThrow(/sender no longer matches/);
+    await expect(
+      freezeBatch(s, input, "platform@example.test"),
+    ).rejects.toThrow(/sender no longer matches/);
+    expect(await history(s)).toEqual([]);
   });
-  it("rejects messages whose combined attachments exceed the Outlook message limit", () => {
-    const { s, input } = mailFixture();
+  it("rejects messages whose combined attachments exceed the Outlook message limit", async () => {
+    const { s, input } = await mailFixture();
     input.drafts[0].attachments = [
       {
         id: "first",
@@ -531,29 +537,31 @@ describe("Durable per-message outbox", () => {
       },
       { id: "second", name: "second.txt", type: "text/plain", size: 1 },
     ];
-    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(/2 MB total/);
-    expect(history(s)).toEqual([]);
+    await expect(freezeBatch(s, input, mailboxFrom)).rejects.toThrow(
+      /2 MB total/,
+    );
+    expect(await history(s)).toEqual([]);
   });
-  it("freezes immutable snapshots and deduplicates the same confirmation", () => {
-    const { s, input, draft } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
-    expect(freezeBatch(s, input, mailboxFrom)).toEqual({
+  it("freezes immutable snapshots and deduplicates the same confirmation", async () => {
+    const { s, input, draft } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
+    expect(await freezeBatch(s, input, mailboxFrom)).toEqual({
       id: batch.id,
       existing: true,
     });
     const original = draft.body;
     input.drafts[0].body = "Changed after confirmation";
-    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(
+    await expect(freezeBatch(s, input, mailboxFrom)).rejects.toThrow(
       /different snapshot/,
     );
-    expect(history(s)[0].draft.body).toBe(original);
-    expect(() =>
+    expect((await history(s))[0].draft.body).toBe(original);
+    await expect(
       freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, mailboxFrom),
-    ).toThrow(/already queued/);
+    ).rejects.toThrow(/already queued/);
   });
   it("submits once under concurrent workers and records acceptance rather than delivery", async () => {
-    const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const { s, input } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const sender = vi
       .fn<Sender>()
       .mockResolvedValue({ state: "accepted", requestId: "provider-test-id" });
@@ -563,30 +571,64 @@ describe("Durable per-message outbox", () => {
     ]);
     expect(sender).toHaveBeenCalledTimes(1);
     expect(sender.mock.calls[0][0].replyTo).toBe("student@wisc.edu");
-    expect(history(s)[0]).toMatchObject({
+    expect((await history(s))[0]).toMatchObject({
       state: "accepted",
       providerRequestId: "provider-test-id",
     });
-    expect(() => resumeDelivery(s, history(s)[0].id)).toThrow(/Only a queued/);
+    await expect(resumeDelivery(s, (await history(s))[0].id)).rejects.toThrow(
+      /Only a queued/,
+    );
+  });
+  it("pauses a slow batch without claiming the remainder and allows explicit resumption", async () => {
+    vi.useFakeTimers();
+    const { s, input } = await mailFixture();
+    input.drafts.push({
+      ...input.drafts[0],
+      id: randomUUID(),
+      recipientEdited: true,
+      to: "other@example.test",
+    });
+    const batch = await freezeBatch(s, input, mailboxFrom);
+    const startBefore = Date.now() + 60_000;
+    const sender = vi.fn<Sender>().mockImplementation(async () => {
+      vi.setSystemTime(startBefore + 1);
+      return { state: "accepted", requestId: "provider-test-id" };
+    });
+    await processBatch(batch.id, sender, undefined, undefined, startBefore);
+    const records = await history(s);
+    expect(records.map((r) => r.state).sort()).toEqual(["accepted", "queued"]);
+    expect(sender).toHaveBeenCalledTimes(1);
+    const queued = records.find((r) => r.state === "queued")!;
+    expect(queued.error).toContain("have not been submitted");
+    await resumeDelivery(s, queued.id);
+    await processBatch(batch.id, sender, undefined, queued.id);
+    expect(sender).toHaveBeenCalledTimes(2);
+    expect(
+      (await history(s)).every(
+        (r) => r.state === "accepted" && r.error === null,
+      ),
+    ).toBe(true);
   });
   it("retains an uncertain submission and never retries it", async () => {
-    const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const { s, input } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const sender = vi
       .fn<Sender>()
       .mockRejectedValue(new Error("connection lost"));
     await processBatch(batch.id, sender);
     await processBatch(batch.id, sender);
     expect(sender).toHaveBeenCalledTimes(1);
-    expect(history(s)[0].state).toBe("unknown");
-    expect(() => resumeDelivery(s, history(s)[0].id)).toThrow(/uncertain/);
-    expect(() =>
+    expect((await history(s))[0].state).toBe("unknown");
+    await expect(resumeDelivery(s, (await history(s))[0].id)).rejects.toThrow(
+      /uncertain/,
+    );
+    await expect(
       freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, mailboxFrom),
-    ).toThrow(/already queued/);
+    ).rejects.toThrow(/already queued/);
   });
   it("allows an explicit retry after a confirmed rejection only", async () => {
-    const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const { s, input } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const sender = vi
       .fn<Sender>()
       .mockResolvedValueOnce({ state: "failed", error: "Rejected" })
@@ -597,112 +639,115 @@ describe("Durable per-message outbox", () => {
     await processBatch(batch.id, sender);
     await processBatch(batch.id, sender);
     expect(sender).toHaveBeenCalledTimes(1);
-    resumeDelivery(s, history(s)[0].id);
+    await resumeDelivery(s, (await history(s))[0].id);
     await processBatch(batch.id, sender);
     expect(sender).toHaveBeenCalledTimes(2);
-    expect(history(s)[0].state).toBe("accepted");
+    expect((await history(s))[0].state).toBe("accepted");
     expect(sender.mock.calls[0][0].id).not.toBe(sender.mock.calls[1][0].id);
   });
   it("keeps successful messages when a different recipient fails", async () => {
-    const { s, input } = mailFixture();
+    const { s, input } = await mailFixture();
     input.drafts.push({
       ...input.drafts[0],
       id: randomUUID(),
       recipientEdited: true,
       to: "other@example.test",
     });
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const batch = await freezeBatch(s, input, mailboxFrom);
     await processBatch(batch.id, async (m) =>
       m.draft.to === "other@example.test"
         ? { state: "failed", error: "Rejected" }
         : { state: "accepted", requestId: "ok" },
     );
-    expect(
-      history(s)
-        .map((r) => r.state)
-        .sort(),
-    ).toEqual(["accepted", "failed"]);
+    expect((await history(s)).map((r) => r.state).sort()).toEqual([
+      "accepted",
+      "failed",
+    ]);
   });
   it("rechecks account state after source checks and cancels queued work on sign out", async () => {
-    const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const { s, input } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, async () => {
-      db().prepare("UPDATE sessions SET verified_at=NULL WHERE id=?").run(s.id);
+      await db()
+        .prepare("UPDATE sessions SET verified_at=NULL WHERE id=?")
+        .run(s.id);
     });
     expect(sender).not.toHaveBeenCalled();
-    expect(history(s)[0].state).toBe("cancelled");
+    expect((await history(s))[0].state).toBe("cancelled");
   });
   it("treats a failed source recheck as a known non-submission", async () => {
-    const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const { s, input } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, async () => {
       throw new Error("Source unavailable");
     });
     expect(sender).not.toHaveBeenCalled();
-    expect(history(s)[0].state).toBe("failed");
+    expect((await history(s))[0].state).toBe("failed");
   });
   it("does not send a cancelled row when a source check finishes late", async () => {
-    const { s, input } = mailFixture();
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const { s, input } = await mailFixture();
+    const batch = await freezeBatch(s, input, mailboxFrom);
     const sender = vi.fn<Sender>();
     await processBatch(batch.id, sender, async () => {
-      db()
+      await db()
         .prepare("UPDATE deliveries SET state='cancelled' WHERE batch_id=?")
         .run(batch.id);
     });
     expect(sender).not.toHaveBeenCalled();
-    expect(history(s)[0].state).toBe("cancelled");
+    expect((await history(s))[0].state).toBe("cancelled");
   });
-  it("scopes history and retry to both browser session and verified account", () => {
-    const { s, input } = mailFixture();
-    freezeBatch(s, input, mailboxFrom);
-    const record = history(s)[0];
-    expect(history({ ...s, id: "another-browser" })).toEqual([]);
-    expect(history({ ...s, account_id: "another-account" })).toEqual([]);
-    expect(() =>
+  it("scopes history and retry to both browser session and verified account", async () => {
+    const { s, input } = await mailFixture();
+    await freezeBatch(s, input, mailboxFrom);
+    const record = (await history(s))[0];
+    expect(await history({ ...s, id: "another-browser" })).toEqual([]);
+    expect(await history({ ...s, account_id: "another-account" })).toEqual([]);
+    await expect(
       resumeDelivery({ ...s, account_id: "another-account" }, record.id),
-    ).toThrow(/does not belong/);
+    ).rejects.toThrow(/does not belong/);
   });
   it("marks interrupted submissions unknown and preserves attachment bytes", async () => {
-    const { s, input } = mailFixture();
+    const { s, input } = await mailFixture();
     const content = Buffer.from("test attachment").toString("base64");
     input.drafts[0].attachments = [
       { id: "test-file", name: "resume.txt", size: 15, type: "text/plain" },
     ];
     input.attachments = [{ id: "test-file", content }];
-    const batch = freezeBatch(s, input, mailboxFrom);
+    const batch = await freezeBatch(s, input, mailboxFrom);
     input.attachments[0].content = "changed";
     const sender = vi
       .fn<Sender>()
       .mockResolvedValue({ state: "accepted", requestId: "ok" });
     await processBatch(batch.id, sender);
     expect(sender.mock.calls[0][0].attachments[0].content).toBe(content);
-    db()
+    await db()
       .prepare(
         "UPDATE deliveries SET state='submitting',updated_at=? WHERE batch_id=?",
       )
       .run(Date.now() - 121000, batch.id);
-    expect(history(s)[0].state).toBe("unknown");
+    expect((await history(s))[0].state).toBe("unknown");
   });
-  it("rejects missing attachment bytes, duplicate recipients and stale source records atomically", () => {
-    const { s, input } = mailFixture();
+  it("rejects missing attachment bytes, duplicate recipients and stale source records atomically", async () => {
+    const { s, input } = await mailFixture();
     input.drafts[0].attachments = [
       { id: "absent", name: "resume.pdf", size: 1, type: "application/pdf" },
     ];
-    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(/missing/);
+    await expect(freezeBatch(s, input, mailboxFrom)).rejects.toThrow(/missing/);
     input.drafts[0].attachments = [];
     input.drafts.push({ ...input.drafts[0], id: randomUUID() });
-    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(
+    await expect(freezeBatch(s, input, mailboxFrom)).rejects.toThrow(
       /one selected draft/,
     );
     input.drafts.pop();
-    db()
+    await db()
       .prepare("UPDATE researchers SET checked_at=?")
       .run(Date.now() - 8 * 86400000);
-    expect(() => freezeBatch(s, input, mailboxFrom)).toThrow(/seven days/);
-    expect(history(s)).toEqual([]);
+    await expect(freezeBatch(s, input, mailboxFrom)).rejects.toThrow(
+      /seven days/,
+    );
+    expect(await history(s)).toEqual([]);
   });
 });
 
@@ -714,28 +759,28 @@ describe("Email provider boundary (mocked; no email is sent)", () => {
       .fn()
       .mockResolvedValue(Response.json({ id: "test-verification" }));
     vi.stubGlobal("fetch", spy);
-    const s = user();
+    const s = await user();
     expect(await requestCode(s, "student@wisc.edu")).toMatchObject({
       sent: true,
     });
     const text = JSON.parse(spy.mock.calls[0][1].body).text;
     const code = text.match(/\b\d{6}\b/)[0];
-    expect(verifyCode(s, code).verified).toBe(true);
+    expect((await verifyCode(s, code)).verified).toBe(true);
     await expect(requestCode(s, "student@wisc.edu")).rejects.toThrow(
       /Too many/,
     );
     expect(spy).toHaveBeenCalledTimes(1);
   });
   it("preserves partial generation results after a job fails", async () => {
-    const id = createJob("owner", "drafts");
+    const id = await createJob("owner", "drafts");
     await runJob(id, async (progress) => {
-      progress("First draft ready", {
+      await progress("First draft ready", {
         drafts: [{ id: "retained" }],
         errors: [],
       });
       throw new Error("interrupted");
     });
-    expect(getJob(id, "owner")).toMatchObject({
+    expect(await getJob(id, "owner")).toMatchObject({
       state: "failed",
       result: { drafts: [{ id: "retained" }] },
     });

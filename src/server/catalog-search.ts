@@ -38,7 +38,7 @@ import type { SearchResult } from "@/lib/contracts";
 import type { Researcher } from "@/lib/types";
 export async function searchCatalog(
   query: string,
-  progress: (stage: string) => void,
+  progress: (stage: string) => void | Promise<void>,
   expand = false,
   refresh = false,
 ): Promise<SearchResult> {
@@ -55,9 +55,9 @@ export async function searchCatalog(
     cached: false,
     warnings: [],
   });
-  progress("Checking your research question");
+  await progress("Checking your research question");
   if (!readableInput(query)) return clarification("");
-  progress("Checking the research catalog");
+  await progress("Checking the research catalog");
   const catalog = await loadCatalog();
   let records = catalog.records;
   if (!/emerit|荣休|退休/i.test(query))
@@ -70,13 +70,13 @@ export async function searchCatalog(
   let live: SearchResult | undefined;
   let webSearchStatus: SearchResult["webSearchStatus"];
   const key = digest("catalog-plan-v6:" + query.toLowerCase());
-  const saved = db()
+  const saved = (await db()
     .prepare("SELECT payload FROM search_cache WHERE key=? AND expires>?")
-    .get(key, Date.now()) as { payload: string } | undefined;
+    .get(key, Date.now())) as { payload: string } | undefined;
   const exactNames = records.filter(
     (r) => normalizeTopic(query) === normalizeTopic(r.name),
   );
-  progress("Checking your research question");
+  await progress("Checking your research question");
   let literalFallback = false;
   const rawPlan = exactNames.length
     ? {
@@ -108,7 +108,7 @@ export async function searchCatalog(
         });
   let plan = cleanQueryPlan(planSchema.parse(rawPlan), query);
   if (!exactNames.length && needsEnglishAliases(plan, query)) {
-    progress("Checking bilingual research terms");
+    await progress("Checking bilingual research terms");
     plan = cleanQueryPlan(
       await structured(
         "catalog_query_bilingual",
@@ -132,7 +132,7 @@ export async function searchCatalog(
       "AI interpretation is unavailable. These results match the complete topic and known aliases in the catalog; nuanced intent and exclusions have not been interpreted.",
     );
   if (!saved && !exactNames.length && !literalFallback)
-    db()
+    await db()
       .prepare(
         "INSERT INTO search_cache(key,payload,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,expires=excluded.expires",
       )
@@ -143,16 +143,17 @@ export async function searchCatalog(
     try {
       // A roster entry may still lack research evidence. Never exclude the whole
       // campus roster from discovery; verified profiles merge by stable ID.
-      live = await withSearchDeadline((signal) =>
-        discoverLive(
-          query,
-          (stage) => {
-            signal.throwIfAborted();
-            progress(stage);
-          },
-          true,
-          signal,
-        ),
+      live = await withSearchDeadline(
+        async (signal) =>
+          await discoverLive(
+            query,
+            async (stage) => {
+              signal.throwIfAborted();
+              await progress(stage);
+            },
+            true,
+            signal,
+          ),
       );
       webSearchStatus = "complete";
       records = [
@@ -171,7 +172,7 @@ export async function searchCatalog(
           : "unavailable";
     }
   }
-  progress(
+  await progress(
     "Matching interests across " + records.length + " researcher profiles",
   );
   const terms = plan.groups.flatMap((g) => g.terms.map(normalizeTopic));
@@ -212,7 +213,7 @@ export async function searchCatalog(
   if (refresh) {
     const refreshed: Researcher[] = [];
     for (let i = 0; i < matched.length; i += 2) {
-      progress(
+      await progress(
         `Reading current sources ${i + 1}–${Math.min(i + 2, matched.length)} of ${matched.length}`,
       );
       await Promise.all(
@@ -275,7 +276,7 @@ export async function searchCatalog(
       stale +
         " profiles have evidence older than one week. Openings may have changed; refresh before contacting.",
     );
-  progress("Preparing all " + matched.length + " matching results");
+  await progress("Preparing all " + matched.length + " matching results");
   return {
     id: randomUUID(),
     query,

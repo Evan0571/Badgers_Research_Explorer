@@ -6,16 +6,16 @@ import { resumeInputIssue } from "@/lib/input-quality";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "no-store" };
-  if (Number(request.headers.get("content-length") || 0) > 11 * 1024 * 1024)
+  if (Number(request.headers.get("content-length") || 0) > 4 * 1024 * 1024)
     return Response.json(
-      { error: "Choose a file smaller than 10 MB." },
+      { error: "Choose a file smaller than 3 MB." },
       { status: 413, headers },
     );
   try {
     checkOrigin(request);
     const user = await session();
-    rateLimit(`extract:${user.id}`, 15, 3600000);
-    const bytes = await readBody(request, 11 * 1024 * 1024);
+    await rateLimit(`extract:${user.id}`, 15, 3600000);
+    const bytes = await readBody(request, 4 * 1024 * 1024);
     const form = await new Response(new Uint8Array(bytes), {
       headers: { "Content-Type": request.headers.get("content-type") || "" },
     }).formData();
@@ -25,9 +25,9 @@ export async function POST(request: Request) {
         { error: "Choose a résumé file." },
         { status: 400, headers },
       );
-    if (file.size > 10 * 1024 * 1024)
+    if (file.size > 3 * 1024 * 1024)
       return Response.json(
-        { error: "Choose a file smaller than 10 MB." },
+        { error: "Choose a file smaller than 3 MB." },
         { status: 413, headers },
       );
     const ext = file.name.split(".").pop()?.toLowerCase();

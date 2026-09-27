@@ -5,13 +5,13 @@ import { checkOrigin, failure, json, jsonBody } from "@/server/http";
 import { createJob, runJob } from "@/server/jobs";
 import { searchCatalog } from "@/server/catalog-search";
 export const runtime = "nodejs";
-export const maxDuration = 600;
+export const maxDuration = 300;
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const user = await session();
-    rateLimit(`search:${user.id}`, 12, 3600000);
-    rateLimit("search:global", 200, 3600000);
+    await rateLimit(`search:${user.id}`, 12, 3600000);
+    await rateLimit("search:global", 200, 3600000);
     const { query, expand, refresh } = await jsonBody(
       request,
       z.object({
@@ -20,9 +20,14 @@ export async function POST(request: Request) {
         refresh: z.boolean().default(false),
       }),
     );
-    const id = createJob(user.id, "search");
-    after(() =>
-      runJob(id, (progress) => searchCatalog(query, progress, expand, refresh)),
+    const id = await createJob(user.id, "search");
+    after(
+      async () =>
+        await runJob(
+          id,
+          async (progress) =>
+            await searchCatalog(query, progress, expand, refresh),
+        ),
     );
     return json({ id }, 202);
   } catch (error) {

@@ -31,17 +31,15 @@ const researcher = {
 } as Researcher;
 const draft = { researcherId: "alex", to: "alex@wisc.edu" } as Draft;
 beforeEach(() => {
-  vi.mocked(storedResearcher).mockReset().mockReturnValue(researcher);
+  vi.mocked(storedResearcher).mockReset().mockResolvedValue(researcher);
   vi.mocked(readSource).mockReset().mockResolvedValue(profile);
-  vi.mocked(structured)
-    .mockReset()
-    .mockResolvedValue({
-      eligible: true,
-      affiliationSourceId: "profile",
-      affiliationQuote:
-        "Alex Chen is a professor at the University of Wisconsin-Madison.",
-      reason: "Current affiliation and contact route.",
-    });
+  vi.mocked(structured).mockReset().mockResolvedValue({
+    eligible: true,
+    affiliationSourceId: "profile",
+    affiliationQuote:
+      "Alex Chen is a professor at the University of Wisconsin-Madison.",
+    reason: "Current affiliation and contact route.",
+  });
 });
 describe("Pre-send source recheck", () => {
   it("requires a fresh fetched address and an exact university affiliation quote", async () => {

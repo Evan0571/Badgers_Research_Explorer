@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
-    disconnectOutlook(await session(false));
+    await disconnectOutlook(await session(false));
     return json({ disconnected: true });
   } catch (error) {
     return failure(error);

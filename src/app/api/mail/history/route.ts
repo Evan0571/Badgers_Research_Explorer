@@ -7,7 +7,7 @@ import { checkOrigin, failure, json, jsonBody, AppError } from "@/server/http";
 export const runtime = "nodejs";
 export async function GET() {
   try {
-    return json({ records: history(await session(false)) });
+    return json({ records: await history(await session(false)) });
   } catch (error) {
     return failure(error);
   }
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
         progress: z.string().max(1000).optional(),
       }),
     );
-    const row = db()
+    const row = await db()
       .prepare(
         "SELECT state FROM deliveries WHERE id=? AND session_id=? AND account_id=?",
       )
@@ -37,7 +37,7 @@ export async function PATCH(request: Request) {
         404,
       );
     if (input.action === "cancel") {
-      const change = db()
+      const change = await db()
         .prepare(
           "UPDATE deliveries SET state='cancelled',updated_at=? WHERE id=? AND state='queued'",
         )
@@ -49,7 +49,7 @@ export async function PATCH(request: Request) {
           409,
         );
     } else
-      db()
+      await db()
         .prepare("UPDATE deliveries SET progress=?,updated_at=? WHERE id=?")
         .run(input.progress || "", Date.now(), input.id);
     return json({ updated: true });

@@ -19,7 +19,11 @@ export function outlookSender(sessionId: string): Sender {
     let auth: Awaited<ReturnType<typeof outlookAccess>>;
     try {
       auth = await outlookAccess(sessionId, message.sender);
-      assertOutlookConnection(sessionId, message.sender, auth.connectionId);
+      await assertOutlookConnection(
+        sessionId,
+        message.sender,
+        auth.connectionId,
+      );
     } catch (error) {
       return {
         state: "failed",
@@ -67,7 +71,7 @@ export function outlookSender(sessionId: string): Sender {
         };
       if ([400, 401, 403, 404, 413, 422, 429].includes(response.status)) {
         if (response.status === 401)
-          disconnectOutlook(currentSession(sessionId), auth.tokens);
+          await disconnectOutlook(await currentSession(sessionId), auth.tokens);
         return {
           state: "failed",
           error:

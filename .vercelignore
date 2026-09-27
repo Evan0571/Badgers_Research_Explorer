@@ -1,0 +1,9 @@
+.env*
+.data
+*.sqlite*
+output
+tmp
+research
+.playwright-cli
+node_modules
+.git

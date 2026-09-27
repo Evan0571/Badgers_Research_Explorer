@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { db, transaction } from "./db";
 import { AppError } from "./http";
 import type { JobStatus } from "@/lib/contracts";
+export const JOB_TIMEOUT_MS = 270_000;
 
-export function createJob(sessionId: string, kind: string) {
-  return transaction(() => {
-    const busy = db()
+export async function createJob(sessionId: string, kind: string) {
+  return await transaction(async () => {
+    const busy = await db()
       .prepare(
         "SELECT id FROM jobs WHERE session_id=? AND kind=? AND state='running' AND updated_at>?",
       )
@@ -18,7 +19,7 @@ export function createJob(sessionId: string, kind: string) {
       );
     const id = randomUUID(),
       now = Date.now();
-    db()
+    await db()
       .prepare(
         "INSERT INTO jobs(id,session_id,kind,state,stage,created_at,updated_at) VALUES(?,?,?,'running','Starting',?,?)",
       )
@@ -29,16 +30,18 @@ export function createJob(sessionId: string, kind: string) {
 export async function runJob(
   id: string,
   work: (
-    progress: (stage: string, partial?: unknown) => void,
+    progress: (stage: string, partial?: unknown) => void | Promise<void>,
   ) => Promise<unknown>,
 ) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const running = work((stage, partial) => {
-      const current = db().prepare("SELECT state FROM jobs WHERE id=?").get(id);
+    const running = work(async (stage, partial) => {
+      const current = await db()
+        .prepare("SELECT state FROM jobs WHERE id=?")
+        .get(id);
       if (current?.state !== "running")
         throw new AppError("JOB_STOPPED", "This task has stopped.");
-      db()
+      await db()
         .prepare(
           "UPDATE jobs SET stage=?,updated_at=?,payload=COALESCE(?,payload) WHERE id=? AND state='running'",
         )
@@ -60,17 +63,17 @@ export async function runJob(
                 "The search took too long. Please try a more specific question.",
               ),
             ),
-          540000,
+          JOB_TIMEOUT_MS,
         );
       }),
     ]);
-    db()
+    await db()
       .prepare(
         "UPDATE jobs SET state='succeeded',stage='Complete',payload=?,updated_at=? WHERE id=? AND state='running'",
       )
       .run(JSON.stringify(result), Date.now(), id);
   } catch (error) {
-    db()
+    await db()
       .prepare(
         "UPDATE jobs SET state='failed',stage='Stopped',error=?,updated_at=? WHERE id=? AND state='running'",
       )
@@ -85,19 +88,22 @@ export async function runJob(
     clearTimeout(timer);
   }
 }
-export function stopJob(id: string, sessionId: string) {
-  getJob(id, sessionId);
-  db()
+export async function stopJob(id: string, sessionId: string) {
+  await getJob(id, sessionId);
+  await db()
     .prepare(
       "UPDATE jobs SET state='failed',stage='Stopped',error='This task was cancelled.',updated_at=? WHERE id=? AND session_id=? AND state='running'",
     )
     .run(Date.now(), id, sessionId);
-  return getJob(id, sessionId);
+  return await getJob(id, sessionId);
 }
-export function getJob(id: string, sessionId: string): JobStatus {
-  const row = db()
+export async function getJob(
+  id: string,
+  sessionId: string,
+): Promise<JobStatus> {
+  const row = (await db()
     .prepare("SELECT * FROM jobs WHERE id=? AND session_id=?")
-    .get(id, sessionId) as
+    .get(id, sessionId)) as
     | {
         id: string;
         kind: string;
@@ -118,12 +124,12 @@ export function getJob(id: string, sessionId: string): JobStatus {
   if (
     row.state === "running" &&
     (row.updated_at < Date.now() - 300000 ||
-      row.created_at < Date.now() - 540000)
+      row.created_at < Date.now() - JOB_TIMEOUT_MS)
   ) {
     row.state = "failed";
     row.error =
       "The server was interrupted or the request timed out. Please retry.";
-    db()
+    await db()
       .prepare(
         "UPDATE jobs SET state='failed',error=? WHERE id=? AND state='running'",
       )

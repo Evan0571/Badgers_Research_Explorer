@@ -58,7 +58,11 @@ export type Sender = (message: {
   attachments: FrozenAttachment[];
 }) => Promise<Submission>;
 
-export function freezeBatch(user: Session, input: BatchInput, sender: string) {
+export async function freezeBatch(
+  user: Session,
+  input: BatchInput,
+  sender: string,
+) {
   const identity = verifiedIdentity(user);
   if (input.senderEmail !== identity.email || sender !== identity.email)
     throw new AppError(
@@ -74,12 +78,12 @@ export function freezeBatch(user: Session, input: BatchInput, sender: string) {
       accountId: identity.accountId,
     }),
   );
-  return transaction(() => {
-    const previous = db()
+  return await transaction(async () => {
+    const previous = (await db()
       .prepare(
         "SELECT id,fingerprint FROM batches WHERE session_id=? AND idempotency_key=?",
       )
-      .get(user.id, input.idempotencyKey) as
+      .get(user.id, input.idempotencyKey)) as
       { id: string; fingerprint: string } | undefined;
     if (previous) {
       if (previous.fingerprint !== fingerprint)
@@ -92,105 +96,108 @@ export function freezeBatch(user: Session, input: BatchInput, sender: string) {
     }
     const recipients = new Set<string>();
     let totalBytes = 0;
-    const snapshots = input.drafts.map((draft) => {
-      const issues = draftIssues(draft);
-      if (issues.length) throw new AppError("DRAFT_INVALID", issues.join(" "));
-      const recipient = draft.to.trim().toLowerCase();
-      if (!z.email().safeParse(recipient).success)
-        throw new AppError(
-          "RECIPIENT_INVALID",
-          "Use one valid recipient email address.",
-        );
-      if (recipients.has(recipient))
-        throw new AppError(
-          "DUPLICATE_RECIPIENT",
-          "Only one selected draft per recipient is allowed.",
-        );
-      recipients.add(recipient);
-      if (!isSelfAddressed(draft, identity.email)) {
-        const researcher = storedResearcher(draft.researcherId);
-        if (!canEmail(researcher))
+    const snapshots = await Promise.all(
+      input.drafts.map(async (draft) => {
+        const issues = draftIssues(draft);
+        if (issues.length)
+          throw new AppError("DRAFT_INVALID", issues.join(" "));
+        const recipient = draft.to.trim().toLowerCase();
+        if (!z.email().safeParse(recipient).success)
           throw new AppError(
-            "CONTACT_ROUTE",
-            "A selected researcher no longer has an eligible email contact route.",
+            "RECIPIENT_INVALID",
+            "Use one valid recipient email address.",
+          );
+        if (recipients.has(recipient))
+          throw new AppError(
+            "DUPLICATE_RECIPIENT",
+            "Only one selected draft per recipient is allowed.",
+          );
+        recipients.add(recipient);
+        if (!isSelfAddressed(draft, identity.email)) {
+          const researcher = await storedResearcher(draft.researcherId);
+          if (!canEmail(researcher))
+            throw new AppError(
+              "CONTACT_ROUTE",
+              "A selected researcher no longer has an eligible email contact route.",
+              409,
+            );
+          if (
+            !draft.recipientEdited &&
+            researcher.contact.email?.toLowerCase() !== recipient
+          )
+            throw new AppError(
+              "RECIPIENT_CHANGED",
+              "A recipient differs from its source. Review and confirm the edited address.",
+              409,
+            );
+        }
+        const duplicate = await db()
+          .prepare(
+            "SELECT id FROM deliveries WHERE session_id=? AND account_id=? AND draft_id=? AND state IN ('queued','submitting','accepted','unknown')",
+          )
+          .get(user.id, identity.accountId, draft.id);
+        if (duplicate)
+          throw new AppError(
+            "DRAFT_SUBMITTED",
+            "This draft is already queued, submitted, or awaiting verification. Check contact history before submitting it again.",
             409,
           );
+        const attachments: FrozenAttachment[] = (draft.attachments || []).map(
+          (meta) => {
+            const data = input.attachments.find((a) => a.id === meta.id);
+            if (!data || !/^[A-Za-z0-9+/]*={0,2}$/.test(data.content))
+              throw new AppError(
+                "ATTACHMENT_MISSING",
+                "An attachment is missing. Reattach it and review again.",
+              );
+            const bytes = Buffer.from(data.content, "base64");
+            if (
+              bytes.length !== meta.size ||
+              bytes.length > 2 * 1024 * 1024 ||
+              bytes.toString("base64") !== data.content
+            )
+              throw new AppError(
+                "ATTACHMENT_SIZE",
+                "Attachments must match the preview and be no larger than 2 MB each.",
+                413,
+              );
+            if (
+              /[\r\n\0]/.test(meta.name) ||
+              !/\.(pdf|docx|txt)$/i.test(meta.name)
+            )
+              throw new AppError(
+                "ATTACHMENT_NAME",
+                "Use a PDF, DOCX or TXT attachment with a valid filename.",
+              );
+            totalBytes += bytes.length;
+            return {
+              ...meta,
+              content: data.content,
+              sha256: digest(data.content),
+            };
+          },
+        );
         if (
-          !draft.recipientEdited &&
-          researcher.contact.email?.toLowerCase() !== recipient
+          attachments.reduce((n, attachment) => n + attachment.size, 0) >
+          2 * 1024 * 1024
         )
           throw new AppError(
-            "RECIPIENT_CHANGED",
-            "A recipient differs from its source. Review and confirm the edited address.",
-            409,
+            "ATTACHMENT_SIZE",
+            "Keep attachments within 2 MB total per message for Outlook sending.",
+            413,
           );
-      }
-      const duplicate = db()
-        .prepare(
-          "SELECT id FROM deliveries WHERE session_id=? AND account_id=? AND draft_id=? AND state IN ('queued','submitting','accepted','unknown')",
-        )
-        .get(user.id, identity.accountId, draft.id);
-      if (duplicate)
-        throw new AppError(
-          "DRAFT_SUBMITTED",
-          "This draft is already queued, submitted, or awaiting verification. Check contact history before submitting it again.",
-          409,
-        );
-      const attachments: FrozenAttachment[] = (draft.attachments || []).map(
-        (meta) => {
-          const data = input.attachments.find((a) => a.id === meta.id);
-          if (!data || !/^[A-Za-z0-9+/]*={0,2}$/.test(data.content))
-            throw new AppError(
-              "ATTACHMENT_MISSING",
-              "An attachment is missing. Reattach it and review again.",
-            );
-          const bytes = Buffer.from(data.content, "base64");
-          if (
-            bytes.length !== meta.size ||
-            bytes.length > 2 * 1024 * 1024 ||
-            bytes.toString("base64") !== data.content
-          )
-            throw new AppError(
-              "ATTACHMENT_SIZE",
-              "Attachments must match the preview and be no larger than 2 MB each.",
-              413,
-            );
-          if (
-            /[\r\n\0]/.test(meta.name) ||
-            !/\.(pdf|docx|txt)$/i.test(meta.name)
-          )
-            throw new AppError(
-              "ATTACHMENT_NAME",
-              "Use a PDF, DOCX or TXT attachment with a valid filename.",
-            );
-          totalBytes += bytes.length;
-          return {
-            ...meta,
-            content: data.content,
-            sha256: digest(data.content),
-          };
-        },
-      );
-      if (
-        attachments.reduce((n, attachment) => n + attachment.size, 0) >
-        2 * 1024 * 1024
-      )
-        throw new AppError(
-          "ATTACHMENT_SIZE",
-          "Keep attachments within 2 MB total per message for Outlook sending.",
-          413,
-        );
-      return { draft: { ...draft, to: recipient }, attachments };
-    });
-    if (totalBytes > 6 * 1024 * 1024)
+        return { draft: { ...draft, to: recipient }, attachments };
+      }),
+    );
+    if (totalBytes > 2 * 1024 * 1024)
       throw new AppError(
         "BATCH_SIZE",
-        "The selected batch has more than 6 MB of attachment data. Send a smaller batch.",
+        "The selected batch has more than 2 MB of attachment data. Send a smaller batch.",
         413,
       );
     const id = randomUUID(),
       now = Date.now();
-    db()
+    await db()
       .prepare(
         "INSERT INTO batches(id,session_id,account_id,idempotency_key,fingerprint,created_at) VALUES(?,?,?,?,?,?)",
       )
@@ -203,7 +210,7 @@ export function freezeBatch(user: Session, input: BatchInput, sender: string) {
         now,
       );
     for (const item of snapshots)
-      db()
+      await db()
         .prepare(
           "INSERT INTO deliveries(id,batch_id,session_id,account_id,sender,draft_id,snapshot,attachments,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'queued',?,?)",
         )
@@ -227,14 +234,29 @@ export async function processBatch(
   sender: Sender,
   preflight?: (draft: Draft) => Promise<void>,
   onlyId?: string,
+  startBefore = Infinity,
 ) {
-  const messages = db()
+  const messages = (await db()
     .prepare(
       "SELECT * FROM deliveries WHERE batch_id=? AND state='queued' ORDER BY created_at,id",
     )
-    .all(batchId) as unknown as DeliveryRow[];
+    .all(batchId)) as unknown as DeliveryRow[];
   for (const message of messages) {
     if (onlyId && message.id !== onlyId) continue;
+    // Leave time for the last source check and Outlook submission to finish.
+    // Unclaimed snapshots remain safe to resume explicitly from contact history.
+    if (Date.now() >= startBefore) {
+      await db()
+        .prepare(
+          "UPDATE deliveries SET error=?,updated_at=? WHERE batch_id=? AND state='queued'",
+        )
+        .run(
+          "This batch paused before starting the remaining messages. Use Resume / retry in contact history to continue. These queued messages have not been submitted.",
+          Date.now(),
+          batchId,
+        );
+      break;
+    }
     const draft = unseal<Draft>(message.snapshot);
     // This sender was bound to a verified identity when the snapshot was frozen.
     // Self-addressed tests do not depend on a professor's source or affiliation.
@@ -243,7 +265,7 @@ export async function processBatch(
       try {
         await preflight(draft);
       } catch (error) {
-        db()
+        await db()
           .prepare(
             "UPDATE deliveries SET state='failed',error=?,updated_at=? WHERE id=? AND state='queued'",
           )
@@ -257,9 +279,9 @@ export async function processBatch(
         continue;
       }
     }
-    const user = db()
+    const user = (await db()
       .prepare("SELECT * FROM sessions WHERE id=? AND expires>?")
-      .get(message.session_id, Date.now()) as unknown as Session | undefined;
+      .get(message.session_id, Date.now())) as unknown as Session | undefined;
     let email: string;
     try {
       if (!user) throw new Error("Expired session");
@@ -271,7 +293,7 @@ export async function processBatch(
         throw new Error("Account changed");
       email = identity.email;
     } catch {
-      db()
+      await db()
         .prepare(
           "UPDATE deliveries SET state='cancelled',error='Email verification expired or the account changed. Review a new batch.',updated_at=? WHERE batch_id=? AND state='queued'",
         )
@@ -279,9 +301,9 @@ export async function processBatch(
       break;
     }
     // Only the worker that atomically claims this row may submit it.
-    const claim = db()
+    const claim = await db()
       .prepare(
-        "UPDATE deliveries SET state='submitting',attempt=attempt+1,updated_at=? WHERE id=? AND state='queued'",
+        "UPDATE deliveries SET state='submitting',attempt=attempt+1,error=NULL,updated_at=? WHERE id=? AND state='queued'",
       )
       .run(Date.now(), message.id);
     if (!claim.changes) continue;
@@ -301,7 +323,7 @@ export async function processBatch(
           "The connection ended without a confirmed response. Check with the email service before sending again.",
       };
     }
-    db()
+    await db()
       .prepare(
         "UPDATE deliveries SET state=?,provider_request_id=?,error=?,updated_at=? WHERE id=? AND state='submitting'",
       )
@@ -315,14 +337,14 @@ export async function processBatch(
     // Never automatically retry a submission, including a timeout.
   }
 }
-export function resumeDelivery(user: Session, id: string) {
+export async function resumeDelivery(user: Session, id: string) {
   const identity = verifiedIdentity(user);
-  return transaction(() => {
-    const row = db()
+  return await transaction(async () => {
+    const row = (await db()
       .prepare(
         "SELECT * FROM deliveries WHERE id=? AND session_id=? AND account_id=?",
       )
-      .get(id, user.id, identity.accountId) as unknown as
+      .get(id, user.id, identity.accountId)) as unknown as
       DeliveryRow | undefined;
     if (!row)
       throw new AppError(
@@ -345,14 +367,14 @@ export function resumeDelivery(user: Session, id: string) {
     const draft = unseal<Draft>(row.snapshot);
     if (
       !isSelfAddressed(draft, identity.email) &&
-      !canEmail(storedResearcher(draft.researcherId))
+      !canEmail(await storedResearcher(draft.researcherId))
     )
       throw new AppError(
         "CONTACT_ROUTE",
         "Check this researcher's current contact route before creating a new batch.",
         409,
       );
-    db()
+    await db()
       .prepare(
         "UPDATE deliveries SET state='queued',error=NULL,updated_at=? WHERE id=? AND state='failed'",
       )
@@ -360,18 +382,18 @@ export function resumeDelivery(user: Session, id: string) {
     return row.batch_id;
   });
 }
-export function history(user: Session) {
+export async function history(user: Session) {
   const identity = verifiedIdentity(user);
-  db()
+  await db()
     .prepare(
       "UPDATE deliveries SET state='unknown',error='Submission was interrupted. Verify with the email service before trying again.',updated_at=? WHERE session_id=? AND account_id=? AND state='submitting' AND updated_at<?",
     )
     .run(Date.now(), user.id, identity.accountId, Date.now() - 120000);
-  const rows = db()
+  const rows = (await db()
     .prepare(
       "SELECT * FROM deliveries WHERE session_id=? AND account_id=? ORDER BY created_at DESC LIMIT 100",
     )
-    .all(user.id, identity.accountId) as unknown as DeliveryRow[];
+    .all(user.id, identity.accountId)) as unknown as DeliveryRow[];
   return rows.map((row) => ({
     id: row.id,
     batchId: row.batch_id,

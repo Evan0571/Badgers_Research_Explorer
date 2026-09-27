@@ -35,9 +35,11 @@ export async function catalogREST(path: string, init: RequestInit = {}) {
   const body = await res.text();
   return body ? JSON.parse(body) : null;
 }
-export function localCatalog(): Researcher[] {
+export async function localCatalog(): Promise<Researcher[]> {
   return (
-    db().prepare("SELECT payload FROM researchers ORDER BY id").all() as {
+    (await db()
+      .prepare("SELECT payload FROM researchers ORDER BY id")
+      .all()) as {
       payload: string;
     }[]
   ).flatMap((row) => {
@@ -45,7 +47,7 @@ export function localCatalog(): Researcher[] {
     return parsed.success && !parsed.data.supersededBy ? [parsed.data] : [];
   });
 }
-export function mirrorResearchers(records: Researcher[]) {
+export async function mirrorResearchers(records: Researcher[]) {
   const insert = db().prepare(
     "INSERT INTO researchers(id,payload,checked_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,checked_at=excluded.checked_at",
   );
@@ -54,7 +56,11 @@ export function mirrorResearchers(records: Researcher[]) {
       .map((s) => Date.parse(s.checkedAt))
       .filter(Number.isFinite);
     // Mirroring is not verification: never advance evidence dates on a database read.
-    insert.run(r.id, JSON.stringify(r), dates.length ? Math.min(...dates) : 0);
+    await insert.run(
+      r.id,
+      JSON.stringify(r),
+      dates.length ? Math.min(...dates) : 0,
+    );
   }
 }
 type CatalogSnapshot = {
@@ -67,7 +73,7 @@ let snapshotExpires = 0;
 let snapshotRequest: Promise<CatalogSnapshot> | undefined;
 export async function loadCatalog(): Promise<CatalogSnapshot> {
   // Web requests share a short-lived snapshot; ingestion/audit commands and tests always read the database.
-  if (process.env.NODE_ENV !== "production") return readCatalog();
+  if (process.env.NODE_ENV !== "production") return await readCatalog();
   if (cachedSnapshot && Date.now() < snapshotExpires) return cachedSnapshot;
   if (snapshotRequest) return snapshotRequest;
   snapshotRequest = readCatalog()
@@ -82,9 +88,23 @@ export async function loadCatalog(): Promise<CatalogSnapshot> {
   return snapshotRequest;
 }
 async function readCatalog(): Promise<CatalogSnapshot> {
+  if (process.env.DATABASE_URL) {
+    const rows = await db()
+      .prepare(
+        "SELECT payload::text AS payload FROM public.research_catalog ORDER BY id",
+      )
+      .all();
+    return {
+      records: rows
+        .map((row) => researcherSchema.parse(JSON.parse(String(row.payload))))
+        .filter((r) => !r.supersededBy),
+      shared: true,
+      warning: "",
+    };
+  }
   if (!catalogConfigured())
     return {
-      records: localCatalog(),
+      records: await localCatalog(),
       shared: false,
       warning:
         "Using the server's saved public-source catalog. Supabase is not connected yet.",
@@ -98,7 +118,7 @@ async function readCatalog(): Promise<CatalogSnapshot> {
       for (const row of rows) records.push(researcherSchema.parse(row.payload));
       if (rows.length < 500) break;
     }
-    mirrorResearchers(records);
+    await mirrorResearchers(records);
     return {
       records: records.filter((r) => !r.supersededBy),
       shared: true,
@@ -106,7 +126,7 @@ async function readCatalog(): Promise<CatalogSnapshot> {
     };
   } catch {
     return {
-      records: localCatalog(),
+      records: await localCatalog(),
       shared: false,
       warning:
         "Supabase could not be reached. Showing the last locally preserved catalog; check source dates.",
@@ -116,35 +136,41 @@ async function readCatalog(): Promise<CatalogSnapshot> {
 export async function saveCatalog(records: Researcher[]) {
   cachedSnapshot = undefined;
   snapshotExpires = 0;
-  records = records.map((r) => {
-    if (r.coverage) return r;
-    const previous = db()
-      .prepare("SELECT payload FROM researchers WHERE id=?")
-      .get(r.id) as { payload: string } | undefined;
-    if (!previous) return r;
-    const old = researcherSchema.parse(JSON.parse(previous.payload));
-    if (!old.coverage) return r;
-    const indexes = old.sources.filter(
-      (s) =>
-        s.url === "https://guide.wisc.edu/faculty/" ||
-        s.url.startsWith("https://wisc.discovery.academicanalytics.com/"),
-    );
-    return {
-      ...r,
-      publications: old.publications,
-      keywords: [...new Set([...r.keywords, ...old.keywords])],
-      sources: [
-        ...r.sources,
-        ...indexes.filter((s) => !r.sources.some((next) => next.id === s.id)),
-      ],
-      coverage: {
-        ...old.coverage,
-        level: "profile" as const,
-        profileCheckedAt: r.sources[0]?.checkedAt,
-        contactChecked: !!r.contact.email,
-      },
-    };
-  });
+  records = await Promise.all(
+    records.map(async (r) => {
+      if (r.coverage) return r;
+      const previous = (await db()
+        .prepare(
+          process.env.DATABASE_URL
+            ? "SELECT payload::text AS payload FROM public.research_catalog WHERE id=?"
+            : "SELECT payload FROM researchers WHERE id=?",
+        )
+        .get(r.id)) as { payload: string } | undefined;
+      if (!previous) return r;
+      const old = researcherSchema.parse(JSON.parse(previous.payload));
+      if (!old.coverage) return r;
+      const indexes = old.sources.filter(
+        (s) =>
+          s.url === "https://guide.wisc.edu/faculty/" ||
+          s.url.startsWith("https://wisc.discovery.academicanalytics.com/"),
+      );
+      return {
+        ...r,
+        publications: old.publications,
+        keywords: [...new Set([...r.keywords, ...old.keywords])],
+        sources: [
+          ...r.sources,
+          ...indexes.filter((s) => !r.sources.some((next) => next.id === s.id)),
+        ],
+        coverage: {
+          ...old.coverage,
+          level: "profile" as const,
+          profileCheckedAt: r.sources[0]?.checkedAt,
+          contactChecked: !!r.contact.email,
+        },
+      };
+    }),
+  );
   // Other ingestion paths must not erase a newer opportunity review.
   const previous =
     catalogConfigured() && records.length
@@ -155,7 +181,7 @@ export async function saveCatalog(records: Researcher[]) {
               ")",
           )) as { payload: Researcher }[]
         ).map((row) => row.payload)
-      : localCatalog();
+      : await localCatalog();
   records = records.map((r) => {
     const old = previous.find((p) => p.id === r.id);
     if (
@@ -173,7 +199,7 @@ export async function saveCatalog(records: Researcher[]) {
       ],
     });
   });
-  mirrorResearchers(records);
+  await mirrorResearchers(records);
   if (!catalogConfigured() || !records.length) return;
   await catalogREST("research_catalog?on_conflict=id", {
     method: "POST",
@@ -261,7 +287,7 @@ export async function saveFacultyReview(
       },
     )) as { payload: unknown }[];
     if (result.length) {
-      mirrorResearchers([merged]);
+      await mirrorResearchers([merged]);
       cachedSnapshot = undefined;
       snapshotExpires = 0;
       return;

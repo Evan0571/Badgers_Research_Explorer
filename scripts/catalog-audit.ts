@@ -7,7 +7,9 @@ const { departments, matchesDirection } =
   await import("../src/lib/research-metadata");
 const { searchCatalog } = await import("../src/server/catalog-search");
 const { writeFile } = await import("node:fs/promises");
-const local = new Map(localCatalog().map((r) => [r.id, JSON.stringify(r)]));
+const local = new Map(
+  (await localCatalog()).map((r) => [r.id, JSON.stringify(r)]),
+);
 const { records, shared } = await loadCatalog();
 const cloudEqualsLocal =
   shared &&

@@ -45,9 +45,9 @@ export function SearchView() {
   };
   const upload = async (file?: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 3 * 1024 * 1024) {
       setError(
-        t("Choose a file smaller than 10 MB.", "请选择小于 10 MB 的文件。"),
+        t("Choose a file smaller than 3 MB.", "请选择小于 3 MB 的文件。"),
       );
       return;
     }
@@ -249,8 +249,8 @@ export function SearchView() {
             </Button>
             <span>
               {t(
-                "PDF, DOCX or TXT · up to 10 MB",
-                "PDF、DOCX 或 TXT · 最大 10 MB",
+                "PDF, DOCX or TXT · up to 3 MB",
+                "PDF、DOCX 或 TXT · 最大 3 MB",
               )}
             </span>
           </div>

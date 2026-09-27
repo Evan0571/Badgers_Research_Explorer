@@ -24,7 +24,8 @@ export async function GET(request: Request) {
       openings: params.get("openings") || "",
       applications: params.get("applications") || "",
     });
-    if (!filters.success) throw new AppError("INVALID_INPUT", "Invalid undergraduate filter.");
+    if (!filters.success)
+      throw new AppError("INVALID_INPUT", "Invalid undergraduate filter.");
     const undergraduateFilters = filters.data;
     const q = (params.get("q") || "").trim().toLowerCase(),
       department = params.get("department"),

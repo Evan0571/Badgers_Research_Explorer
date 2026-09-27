@@ -53,10 +53,10 @@ export function useMailSubmission(connected?: boolean) {
         snapshots
           .flatMap((d) => d.attachments || [])
           .reduce((n, a) => n + a.size, 0) >
-        6 * 1024 * 1024
+        2 * 1024 * 1024
       )
         throw new Error(
-          "Choose a smaller batch: total attachments must be at most 6 MB.",
+          "Choose a smaller batch: total attachments must be at most 2 MB.",
         );
       const attachments = await Promise.all(
         metas.map(async (meta) => {

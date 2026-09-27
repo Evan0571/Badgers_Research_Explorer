@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const user = await session(false);
-    rateLimit(`outlook:${user.id}`, 10, 3600000);
+    await rateLimit(`outlook:${user.id}`, 10, 3600000);
     return json({ url: await beginOutlookAuthorization(user) });
   } catch (error) {
     return failure(error);

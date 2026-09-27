@@ -7,7 +7,7 @@ if (!catalogConfigured())
   throw new Error(
     "Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to .env.local first.",
   );
-const records = localCatalog();
+const records = await localCatalog();
 for (let i = 0; i < records.length; i += 100)
   await saveCatalog(records.slice(i, i + 100));
 console.log(JSON.stringify({ synced: records.length }));
