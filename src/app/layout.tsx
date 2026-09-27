@@ -6,6 +6,7 @@ import "./layout.css";
 import "./improvements.css";
 import { LocaleProvider } from "@/components/locale";
 import { WorkspaceProvider } from "@/components/explorer/provider";
+import { BRAND_NAME, BRAND_ICON } from "@/lib/brand";
 const inter = localFont({
   src: [
     {
@@ -27,8 +28,13 @@ const inter = localFont({
 });
 export const metadata: Metadata = {
   title: {
-    default: "Research Explorer | Apple style preview",
-    template: "%s | Research Explorer · Apple preview",
+    default: BRAND_NAME,
+    template: `%s | ${BRAND_NAME}`,
+  },
+  applicationName: BRAND_NAME,
+  icons: {
+    icon: { url: BRAND_ICON, type: "image/png" },
+    apple: { url: BRAND_ICON, type: "image/png" },
   },
   description:
     "Explore research at UW-Madison. Understand the work, compare your options, and prepare your next step.",

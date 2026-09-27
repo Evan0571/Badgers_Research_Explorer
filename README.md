@@ -1,4 +1,4 @@
-# UW Research Explorer
+# Badgers Research Explorer
 
 帮助 UW-Madison 学生从兴趣出发理解、比较研究，并准备逐人联系材料。当前沿用已确认的 Apple 风格组件与原版布局，无独立组件说明页。
 

@@ -1,4 +1,5 @@
 import { randomInt, timingSafeEqual } from "node:crypto";
+import { BRAND_NAME } from "@/lib/brand";
 import { config, integrationStatus } from "./config";
 import { db, transaction } from "./db";
 import { AppError } from "./http";
@@ -46,7 +47,7 @@ export async function requestCode(user: Session, rawEmail: string) {
       body: JSON.stringify({
         from: c.verificationFrom,
         to: [email],
-        subject: "Your Research Explorer verification code",
+        subject: `Your ${BRAND_NAME} verification code`,
         text: `Your verification code is ${code}.\n\nIt expires in 10 minutes. This verifies ownership of your UW email; it does not grant access to your school mailbox.\n\nIf you did not request this code, you can ignore this email.`,
       }),
       signal: AbortSignal.timeout(15000),

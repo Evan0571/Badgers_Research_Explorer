@@ -17,10 +17,8 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   ArrowUpRight,
-  CaretDown,
   CaretUp,
   Check,
-  Compass,
   Info,
   Moon,
   Sun,
@@ -28,6 +26,9 @@ import {
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import { useLocale } from "../locale";
+import { BRAND_NAME } from "@/lib/brand";
+import { BrandMark } from "./brand-mark";
+import { DropdownCaret } from "./dropdown-caret";
 
 export function Button({
   variant = "primary",
@@ -204,7 +205,7 @@ export function Select({
         >
           <SelectPrimitive.Value />
           <SelectPrimitive.Icon className="select-caret">
-            <CaretDown size={16} aria-hidden="true" />
+            <DropdownCaret />
           </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
         <SelectPrimitive.Portal>
@@ -232,7 +233,7 @@ export function Select({
               ))}
             </SelectPrimitive.Viewport>
             <SelectPrimitive.ScrollDownButton className="select-scroll">
-              <CaretDown size={16} aria-hidden="true" />
+              <DropdownCaret />
             </SelectPrimitive.ScrollDownButton>
           </SelectPrimitive.Content>
         </SelectPrimitive.Portal>
@@ -336,16 +337,15 @@ export function Dialog({
 }
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link className="brand" href="/" aria-label="Research Explorer home">
-      <Compass size={31} weight="duotone" />
-      <span>
-        {compact ? (
-          "Research Explorer"
-        ) : (
-          <>
-            Research <span className="brand-second">Explorer</span>
-          </>
-        )}
+    <Link
+      className={clsx("brand", compact && "brand-compact")}
+      href="/"
+      aria-label={`${BRAND_NAME} home`}
+    >
+      <BrandMark />
+      <span className="brand-name">
+        <span className="brand-name-primary">Badgers</span>{" "}
+        <span className="brand-name-secondary">Research Explorer</span>
       </span>
     </Link>
   );

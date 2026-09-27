@@ -6,7 +6,6 @@ import {
   ArrowUpRight,
   BookOpen,
   Check,
-  Compass,
   EnvelopeSimple,
   List,
   MagnifyingGlass,
@@ -16,6 +15,7 @@ import {
 import { Badge, Brand, IconButton, LinkButton, ThemeToggle } from "./ui";
 import { LanguageToggle, useLocale } from "./locale";
 import { ResearcherDialog } from "./explorer/researcher-dialog";
+import { BrandMark } from "./ui/brand-mark";
 
 export default function Landing() {
   const { t } = useLocale();
@@ -99,7 +99,7 @@ export default function Landing() {
           </div>
           <div className="hero-preview" id="research-example">
             <div className="preview-heading">
-              <Compass size={20} />
+              <BrandMark size={24} />
               <span>
                 {t(
                   "A little curiosity goes a long way.",
@@ -170,7 +170,7 @@ export default function Landing() {
         </section>
         <div className="principles-strip container">
           <span>
-            <Compass size={18} />{" "}
+            <BrandMark size={24} />{" "}
             {t("Curiosity before credentials", "从好奇心出发")}
           </span>
           <span>

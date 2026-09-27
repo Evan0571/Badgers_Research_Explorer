@@ -5,6 +5,7 @@ import { Button, Field, Notice } from "@/components/ui";
 import { requestJSON } from "@/lib/api";
 import { useEmailIdentity } from "./use-email-identity";
 import { isUWEmail } from "@/lib/uw-email";
+import { BRAND_NAME } from "@/lib/brand";
 
 const connectionMessages: Record<string, [string, string]> = {
   connected: [
@@ -154,7 +155,7 @@ export function EmailVerification() {
               </p>
               <p className="small muted">
                 {t(
-                  "Permission covers your basic profile, sending mail, and maintaining the connection. Research Explorer does not request access to read your inbox.",
+                  `Permission covers your basic profile, sending mail, and maintaining the connection. ${BRAND_NAME} does not request access to read your inbox.`,
                   "授权范围包括基本资料、发送邮件和维持连接，不会申请读取收件箱的权限。",
                 )}
               </p>

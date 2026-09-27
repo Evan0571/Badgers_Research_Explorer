@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CaretDown, Check } from "@phosphor-icons/react";
+import { Check } from "@phosphor-icons/react";
+import { DropdownCaret } from "./dropdown-caret";
 
 type Option = { value: string; label: string };
 const normalize = (value: string) =>
@@ -118,7 +119,7 @@ export function SearchableSelect({
             }
           }}
         />
-        <CaretDown size={16} aria-hidden="true" />
+        <DropdownCaret />
       </div>
       {open && (
         <div className="searchable-select-popup">
