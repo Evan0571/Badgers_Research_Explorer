@@ -17,6 +17,8 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   ArrowUpRight,
+  CaretDown,
+  CaretUp,
   Check,
   Compass,
   Info,
@@ -201,7 +203,9 @@ export function Select({
           aria-labelledby={`${id}-label`}
         >
           <SelectPrimitive.Value />
-          <SelectPrimitive.Icon>⌄</SelectPrimitive.Icon>
+          <SelectPrimitive.Icon className="select-caret">
+            <CaretDown size={16} aria-hidden="true" />
+          </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
         <SelectPrimitive.Portal>
           <SelectPrimitive.Content
@@ -210,7 +214,7 @@ export function Select({
             sideOffset={6}
           >
             <SelectPrimitive.ScrollUpButton className="select-scroll">
-              ⌃
+              <CaretUp size={16} aria-hidden="true" />
             </SelectPrimitive.ScrollUpButton>
             <SelectPrimitive.Viewport>
               {options.map((o) => (
@@ -228,7 +232,7 @@ export function Select({
               ))}
             </SelectPrimitive.Viewport>
             <SelectPrimitive.ScrollDownButton className="select-scroll">
-              ⌄
+              <CaretDown size={16} aria-hidden="true" />
             </SelectPrimitive.ScrollDownButton>
           </SelectPrimitive.Content>
         </SelectPrimitive.Portal>
