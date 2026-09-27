@@ -1,8 +1,8 @@
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { checkOrigin, failure, readBody } from "@/server/http";
 import { session, rateLimit } from "@/server/security";
 import { resumeInputIssue } from "@/lib/input-quality";
+import { createResumePDFParser } from "@/server/resume-pdf";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "no-store" };
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
           { error: "This file is not a valid PDF. Paste its text instead." },
           { status: 422, headers },
         );
-      const parser = new PDFParse({ data: buffer });
+      const parser = await createResumePDFParser(buffer);
       try {
         if ((await parser.getInfo()).total > 20)
           return Response.json(

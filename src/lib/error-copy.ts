@@ -67,6 +67,18 @@ export function errorCopy(message: string, locale: "en" | "zh") {
       ? "AI 暂不可用，当前按完整研究词及已知同义词匹配资料库。复杂意图与排除条件尚未进行语义分析。"
       : message;
   if (locale === "en") return message;
+  const uploadMessages: Record<string, string> = {
+    "The upload service is temporarily unavailable. Try again, upload a DOCX or TXT file, or enter your background manually.":
+      "上传服务暂不可用。请重试、改用 DOCX 或 TXT 文件，或手动填写背景。",
+    "PDF reading is temporarily unavailable. Try again or upload a DOCX or TXT file.":
+      "PDF 读取服务暂不可用。请重试或改用 DOCX、TXT 文件。",
+    "The upload took too long. Try again or enter your background manually.":
+      "上传等待超时。请重试，或手动填写背景信息。",
+    "The upload connection failed. Check your connection and try again.":
+      "上传连接中断。请检查网络后重试。",
+    "Choose a file smaller than 3 MB.": "请选择小于 3 MB 的文件。",
+  };
+  if (uploadMessages[message]) return uploadMessages[message];
   if (/research terms could not be translated reliably/.test(message))
     return "研究词的中英文对应暂时无法可靠确认。可尝试用英文输入研究主题，或直接浏览教授名录。";
   const draftMessages: Record<string, string> = {

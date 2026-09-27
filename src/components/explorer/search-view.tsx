@@ -7,6 +7,7 @@ import { Button, Field, Select, Textarea, Notice } from "@/components/ui";
 import { useWorkspace } from "./provider";
 import { useLocale } from "../locale";
 import { errorCopy } from "@/lib/error-copy";
+import { uploadResume } from "@/lib/resume-upload";
 import { ResumeReview } from "./resume-review";
 import { CatalogCoverageBanner } from "./catalog-coverage";
 export function SearchView() {
@@ -54,16 +55,8 @@ export function SearchView() {
     setUploading(true);
     setError("");
     try {
-      const form = new FormData();
-      form.set("file", file);
-      const res = await fetch("/api/resume", {
-        method: "POST",
-        body: form,
-        signal: AbortSignal.timeout(30000),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      background("resumeText", data.text);
+      const text = await uploadResume(file);
+      background("resumeText", text);
       notify(
         t("Résumé text is ready for your review.", "简历文字已提取，请确认。"),
       );

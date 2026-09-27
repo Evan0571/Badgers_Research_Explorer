@@ -48,6 +48,22 @@ The checks in this section predate the live email integration and Outlook implem
 
 # Verification record
 
+## September 27 production PDF upload repair
+
+Production logs confirmed that `/api/resume` failed at module initialization with `DOMMatrix is not defined`: PDF.js could not find its dynamically loaded `@napi-rs/canvas` dependency in the Vercel function. The browser then attempted to parse the empty HTTP 500 body as JSON.
+
+The upload route now initializes `pdf-parse/worker` before loading the PDF parser, configures its bundled worker, and loads PDF support within the JSON error boundary. Canvas is an explicit dependency and external package; the resume route's output trace includes its native runtime and PDF.js worker. TXT/DOCX extraction does not initialize PDF support. This follows the parser's [serverless troubleshooting guidance](https://github.com/mehmet-kozan/pdf-parse/blob/main/docs/troubleshooting.md).
+
+The upload client validates successful response data and handles empty/HTML hosting errors, size rejections, connection failures, and timeouts with actionable messages. Failed uploads do not replace existing resume text. English and Chinese upload-specific recovery messages are included.
+
+- `npm test -- --maxWorkers=2`: **218 tests across 20 files passed**, including 17 new upload checks.
+- `npm run build`, `npm run typecheck`, and `git diff --check`: passed.
+- The local resume-route trace contains the canvas package, native binary, PDF worker entry, and PDF.js worker.
+- Vercel deployment `dpl_BMg1WicCmQvRAPMPajMa7E3HBYhB` is Ready and aliased to `https://researchexplorer.online`.
+- Actual production multipart uploads at **2026-09-27 16:40 UTC**: synthetic text PDF **200**, synthetic TXT **200**, invalid PDF **422 JSON**, blank PDF **422 JSON** with the OCR/manual-text explanation. PDF output included the expected synthetic university text.
+
+Only synthetic documents were used; no paid AI requests, catalog refreshes, or emails were triggered. This verifies server extraction and client error handling, not OCR or the contents of the user's original PDF.
+
 Date: 2026-09-26. Scope: first frontend implementation, source-checked starter collection, local draft workflow. This is not acceptance of all PRD P0 requirements.
 
 ## Automated checks
