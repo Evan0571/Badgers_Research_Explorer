@@ -42,3 +42,9 @@ npm run start -- --port 3002
 浏览器保存查询、收藏、备注、草稿和附件；服务器 SQLite 保存任务、来源及发送历史。当前没有跨设备同步。发送快照的正文和附件加密保存，数据库目录 `.data/` 已排除提交。简历分析与邮件附件是两个独立操作。
 
 设计依据第三方 [Apple DESIGN.md](https://getdesign.md/apple/design-md)，不是 Apple 官方组件包；来源见 [DESIGN.md](DESIGN.md) 和 [设计对照说明](docs/APPLE-PREVIEW.md)。
+
+## September 27 workflow and catalog update
+
+The active implementation now separates `/explore` (interests and visible background form) from `/explore/results` (live progress, filters and results). The header switches English/Chinese. Email drafts include visible personal details, attachments, and optional AI revisions with preview/apply/undo.
+
+Search reads the full stored catalog before web discovery, without a six-result display cap. The campus importer starts with the official Guide's 2,851 professor-rank appointments, enriches them from all public research-platform units, then verifies public department-profile contacts. Records with missing research remain visible in the new [/explore/faculty](http://127.0.0.1:3002/explore/faculty) directory. Research, email and openings are separate evidence checks. Shared Supabase schema, source definitions, resumable import and weekly refresh commands are in [docs/CATALOG.md](docs/CATALOG.md). The registered Sunday 03:00 Codex task runs all three stages and requires this machine and Codex to be available.

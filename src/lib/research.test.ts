@@ -121,6 +121,22 @@ describe("Honest, separate email drafts", () => {
   });
 });
 describe("Workspace recovery", () => {
+  it.each(["", "A new interest I have not searched yet"])(
+    "persists an interest draft independently of the previous search: %j",
+    (interestDraft) => {
+      const restored = parseWorkspace(
+        JSON.stringify({
+          ...emptyWorkspace,
+          query: "Previous submitted search",
+          interestDraft,
+          saved: ["bilge-mutlu"],
+        }),
+      );
+      expect(restored.interestDraft).toBe(interestDraft);
+      expect(restored.query).toBe("Previous submitted search");
+      expect(restored.saved).toEqual(["bilge-mutlu"]);
+    },
+  );
   it("restores notes, selections, and manually edited draft content", () => {
     const d = makeDraft(researchers[0], emptyWorkspace.background, "AI", "a");
     d.body = "My own introduction";

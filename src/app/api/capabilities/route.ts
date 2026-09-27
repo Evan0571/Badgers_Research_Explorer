@@ -1,3 +1,4 @@
+import { catalogConfigured } from "@/server/catalog-store";
 import { integrationStatus } from "@/server/config";
 import { session } from "@/server/security";
 import { outlookStatus } from "@/server/outlook";
@@ -7,7 +8,11 @@ export async function GET() {
   const status = integrationStatus();
   const outlook = outlookStatus(await session());
   return json({
-    search: { mode: "live-source-review", liveCampusSearch: status.discovery },
+    search: {
+      mode: "catalog-first",
+      sharedCatalog: catalogConfigured(),
+      liveCampusSearch: status.discovery,
+    },
     resume: {
       textExtraction: true,
       aiSuggestions: status.generation,

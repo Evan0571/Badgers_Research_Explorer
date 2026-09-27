@@ -1,4 +1,5 @@
 "use client";
+import { useLocale } from "../locale";
 import { useState } from "react";
 import { Scales, X, BookmarkSimple, ArrowRight } from "@phosphor-icons/react";
 import { researcherById } from "@/lib/catalog";
@@ -13,7 +14,12 @@ import {
 import { useWorkspace } from "./provider";
 import { useResearchActions } from "./actions";
 import { ResearcherDialog } from "./researcher-dialog";
+import {
+  UndergraduateBadges,
+  UndergraduateContactOptions,
+} from "./undergraduate-evidence";
 export function CompareView() {
+  const { t, locale } = useLocale();
   const { workspace: w } = useWorkspace();
   const { toggleSave, toggleCompare, prepareDrafts } = useResearchActions();
   const [detail, setDetail] = useState<string | null>(null);
@@ -23,11 +29,20 @@ export function CompareView() {
   return (
     <>
       <div className="page-heading">
-        <p className="eyebrow">Different questions. Different possibilities.</p>
-        <h1>Find your own connection.</h1>
+        <p className="eyebrow">
+          {t(
+            "Different questions. Different possibilities.",
+            "不同研究方向，不同可能性。",
+          )}
+        </p>
+        <h1>
+          {t("Find your own connection.", "找到与你的兴趣相契合的研究。")}
+        </h1>
         <p>
-          Compare up to three researchers by the same questions. There is no
-          single “best” choice.
+          {t(
+            "Compare up to three researchers by the same questions. There is no single “best” choice.",
+            "使用相同维度比较最多三位教授，帮助你做出自己的选择。",
+          )}
         </p>
       </div>
       {chosen.length > 0 ? (
@@ -37,8 +52,8 @@ export function CompareView() {
               {chosen.length} of 3 comparison spaces used
               {chosen.length === 1 && ". Add another researcher to compare."}
             </span>
-            <LinkButton href="/explore" variant="secondary">
-              Add a researcher
+            <LinkButton href="/explore/results" variant="secondary">
+              {t("Add a researcher", "添加教授")}
             </LinkButton>
           </div>
           <div
@@ -64,34 +79,41 @@ export function CompareView() {
                     size="sm"
                     onClick={() => setDetail(r.id)}
                   >
-                    View research <ArrowRight size={15} />
+                    {t("View research", "查看研究详情")}{" "}
+                    <ArrowRight size={15} />
                   </Button>
                 </header>
                 <section>
-                  <h3>The research question</h3>
+                  <h3>{t("The research question", "研究问题")}</h3>
                   <p>{r.question}</p>
                 </section>
                 <section>
-                  <h3>Research approach</h3>
+                  <h3>{t("Research approach", "研究方法")}</h3>
                   <p>{r.methods}</p>
                 </section>
                 <section>
-                  <h3>Connection to your interests</h3>
+                  <h3>{t("Connection to your interests", "与你兴趣的联系")}</h3>
                   <p>{r.summary}</p>
                 </section>
                 <section>
-                  <h3>Public participation conditions</h3>
-                  <Badge
-                    tone={r.recruitment === "closed" ? "negative" : "neutral"}
-                  >
-                    {r.recruitment === "closed"
-                      ? "No current openings"
-                      : "Openings not stated"}
-                  </Badge>
+                  <h3>{t("Undergraduate research", "本科科研状态")}</h3>
+                  <div className="row wrap">
+                    <UndergraduateBadges researcher={r} />
+                  </div>
                   <p>
-                    Academic credit: not stated.
+                    {t("Academic credit: ", "科研学分：")}
+                    {r.undergraduate?.credit.value === "yes"
+                      ? t("Confirmed", "已确认支持")
+                      : r.undergraduate?.credit.value === "no"
+                        ? t("Not offered", "明确不提供")
+                        : t("Unknown", "未知")}
                     <br />
-                    Paid work: not stated.
+                    {t("Paid research: ", "科研薪酬：")}
+                    {r.undergraduate?.pay.value === "yes"
+                      ? t("Confirmed", "已确认支持")
+                      : r.undergraduate?.pay.value === "no"
+                        ? t("Not offered", "明确不提供")
+                        : t("Unknown", "未知")}
                   </p>
                 </section>
                 <section>
@@ -103,8 +125,15 @@ export function CompareView() {
                   </p>
                 </section>
                 <section>
-                  <h3>The next step</h3>
-                  <p>{r.contact.note}</p>
+                  <h3>{t("Next step", "下一步")}</h3>
+                  <p>
+                    {r.undergraduate
+                      ? locale === "zh"
+                        ? r.undergraduate.applications.detailZh
+                        : r.undergraduate.applications.detail
+                      : r.contact.note}
+                  </p>
+                  <UndergraduateContactOptions researcher={r} />
                 </section>
                 <footer>
                   <Button variant="secondary" onClick={() => toggleSave(r.id)}>
@@ -132,7 +161,7 @@ export function CompareView() {
           icon={<Scales size={34} />}
           title="A little perspective helps."
           action={
-            <LinkButton href="/explore">
+            <LinkButton href="/explore/results">
               Find researchers <ArrowRight size={17} />
             </LinkButton>
           }

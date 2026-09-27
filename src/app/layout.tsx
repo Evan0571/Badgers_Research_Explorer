@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 import "./apple.css";
 import "./layout.css";
+import "./improvements.css";
+import { LocaleProvider } from "@/components/locale";
 import { WorkspaceProvider } from "@/components/explorer/provider";
 const inter = localFont({
   src: [
@@ -45,7 +47,9 @@ export default function RootLayout({
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <WorkspaceProvider>{children}</WorkspaceProvider>
+        <LocaleProvider>
+          <WorkspaceProvider>{children}</WorkspaceProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

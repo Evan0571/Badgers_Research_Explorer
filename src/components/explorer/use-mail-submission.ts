@@ -4,7 +4,7 @@ import { get } from "idb-keyval";
 import { requestJSON } from "@/lib/api";
 import type { Draft } from "@/lib/types";
 
-export function useMailSubmission() {
+export function useMailSubmission(connected?: boolean) {
   const [capability, setCapability] = useState<{
     sendEnabled: boolean;
     senderAddress: string | null;
@@ -13,12 +13,20 @@ export function useMailSubmission() {
     [error, setError] = useState("");
   const lock = useRef(false);
   useEffect(() => {
+    let cancelled = false;
     requestJSON<{
       email: { sendEnabled: boolean; senderAddress: string | null };
     }>("/api/capabilities")
-      .then((result) => setCapability(result.email))
-      .catch(() => {});
-  }, []);
+      .then((result) => {
+        if (!cancelled) setCapability(result.email);
+      })
+      .catch(() => {
+        if (!cancelled) setCapability(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connected]);
   async function submit(drafts: Draft[], senderEmail: string) {
     if (lock.current) return null;
     lock.current = true;

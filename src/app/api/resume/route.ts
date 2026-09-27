@@ -2,6 +2,7 @@ import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { checkOrigin, failure, readBody } from "@/server/http";
 import { session, rateLimit } from "@/server/security";
+import { resumeInputIssue } from "@/lib/input-quality";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "no-store" };
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
     const ext = file.name.split(".").pop()?.toLowerCase();
     let text = "";
     const buffer = Buffer.from(await file.arrayBuffer());
-    if (ext === "txt") text = buffer.toString("utf8");
+    if (ext === "txt")
+      text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
     else if (ext === "pdf") {
       if (!buffer.subarray(0, 5).equals(Buffer.from("%PDF-")))
         return Response.json(
@@ -53,9 +55,17 @@ export async function POST(request: Request) {
       } finally {
         await parser.destroy();
       }
-    } else if (ext === "docx")
+    } else if (ext === "docx") {
+      if (!buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])))
+        return Response.json(
+          {
+            code: "INVALID_RESUME_FILE",
+            error: "This is not a valid DOCX file.",
+          },
+          { status: 422, headers },
+        );
       text = (await mammoth.extractRawText({ buffer })).value;
-    else
+    } else
       return Response.json(
         { error: "Choose a text PDF, DOCX, or TXT file." },
         { status: 415, headers },
@@ -73,6 +83,15 @@ export async function POST(request: Request) {
         {
           error:
             "This document contains too much text. Upload a shorter résumé or paste the relevant passages.",
+        },
+        { status: 422, headers },
+      );
+    if (resumeInputIssue(text))
+      return Response.json(
+        {
+          code: "NOT_RESUME",
+          error:
+            "This does not look like a readable resume or personal background. Upload a resume or describe your education and experience.",
         },
         { status: 422, headers },
       );

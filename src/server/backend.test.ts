@@ -20,6 +20,7 @@ import {
   seal,
   unseal,
   type Session,
+  rateLimit,
 } from "./security";
 import { verifyCode, verifiedIdentity } from "./verification";
 import { createJob, getJob, runJob } from "./jobs";
@@ -58,8 +59,23 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+it("rate limits give a bounded wait and reopen only at the original window boundary", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1000000);
+  rateLimit("qa-limit", 1, 120000);
+  expect(() => rateLimit("qa-limit", 1, 120000)).toThrow(
+    "Try again in 2 minutes",
+  );
+  vi.setSystemTime(1060001);
+  expect(() => rateLimit("qa-limit", 1, 120000)).toThrow(
+    "Try again in 1 minutes",
+  );
+  vi.setSystemTime(1120000);
+  expect(() => rateLimit("qa-limit", 1, 120000)).not.toThrow();
 });
 const user = (): Session => {
   db()
@@ -204,6 +220,8 @@ function extraction() {
     researchers: [
       {
         name: "Alex Chen",
+        academicTitle: "",
+        academicTitleQuote: "",
         universitySourceId: "uw-profile",
         affiliationQuote:
           "Alex Chen is an assistant professor at the University of Wisconsin-Madison.",
@@ -414,6 +432,84 @@ function mailFixture() {
 const mailboxFrom = "student@wisc.edu";
 
 describe("Durable per-message outbox", () => {
+  it("sends to the verified owner without depending on the original professor's source", async () => {
+    const { s, input } = mailFixture();
+    input.drafts[0].to = "STUDENT@wisc.edu";
+    // No client test flag or recipientEdited flag is needed to prove ownership.
+    db().prepare("DELETE FROM researchers").run();
+    const batch = freezeBatch(s, input, mailboxFrom);
+    const preflight = vi
+      .fn()
+      .mockRejectedValue(new Error("Professor source unavailable"));
+    const sender = vi
+      .fn<Sender>()
+      .mockResolvedValue({ state: "accepted", requestId: "self-test" });
+    await processBatch(batch.id, sender, preflight);
+    expect(preflight).not.toHaveBeenCalled();
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(sender.mock.calls[0][0].draft.to).toBe(mailboxFrom);
+    expect(sender.mock.calls[0][0].sender).toBe(mailboxFrom);
+    expect(history(s)[0].state).toBe("accepted");
+  });
+  it("retries an old source-blocked self-addressed snapshot without consulting professor sources", async () => {
+    const { s, input } = mailFixture();
+    input.drafts[0].to = mailboxFrom;
+    const batch = freezeBatch(s, input, mailboxFrom);
+    db()
+      .prepare(
+        "UPDATE deliveries SET state='failed',error='Contact source check failed' WHERE batch_id=?",
+      )
+      .run(batch.id);
+    const sender = vi
+      .fn<Sender>()
+      .mockResolvedValue({ state: "accepted", requestId: "retry-self-test" });
+    const preflight = vi
+      .fn()
+      .mockRejectedValue(new Error("Professor source unavailable"));
+    db().prepare("DELETE FROM researchers").run();
+    const record = history(s)[0];
+    expect(resumeDelivery(s, record.id)).toBe(batch.id);
+    await processBatch(batch.id, sender, preflight, record.id);
+    expect(preflight).not.toHaveBeenCalled();
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(history(s)[0].state).toBe("accepted");
+  });
+  it("does not treat another recipient as a self-test just because its address was edited", async () => {
+    const { s, input } = mailFixture();
+    input.drafts[0].to = "other@wisc.edu";
+    input.drafts[0].recipientEdited = true;
+    const batch = freezeBatch(s, input, mailboxFrom);
+    const preflight = vi
+      .fn()
+      .mockRejectedValue(new Error("Professor source unavailable"));
+    const sender = vi.fn<Sender>();
+    await processBatch(batch.id, sender, preflight);
+    expect(preflight).toHaveBeenCalledTimes(1);
+    expect(sender).not.toHaveBeenCalled();
+    expect(history(s)[0].state).toBe("failed");
+    db().prepare("DELETE FROM researchers").run();
+    expect(() => resumeDelivery(s, history(s)[0].id)).toThrow();
+    expect(() =>
+      freezeBatch(s, { ...input, idempotencyKey: randomUUID() }, mailboxFrom),
+    ).toThrow();
+  });
+  it("still checks verification and sender identity for a self-addressed test", async () => {
+    const { s, input } = mailFixture();
+    input.drafts[0].to = mailboxFrom;
+    expect(() =>
+      freezeBatch(s, { ...input, senderEmail: "other@wisc.edu" }, mailboxFrom),
+    ).toThrow(/sender no longer matches/);
+    const batch = freezeBatch(s, input, mailboxFrom);
+    db().prepare("UPDATE sessions SET verified_at=NULL WHERE id=?").run(s.id);
+    const sender = vi.fn<Sender>();
+    await processBatch(batch.id, sender, vi.fn());
+    expect(sender).not.toHaveBeenCalled();
+    expect(
+      db()
+        .prepare("SELECT state FROM deliveries WHERE batch_id=?")
+        .get(batch.id)?.state,
+    ).toBe("cancelled");
+  });
   it("rejects a forged or stale sender before creating any delivery", () => {
     const { s, input } = mailFixture();
     expect(() =>

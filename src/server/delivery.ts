@@ -8,6 +8,7 @@ import { digest, seal, unseal, type Session } from "./security";
 import { verifiedIdentity } from "./verification";
 import { storedResearcher } from "./discovery";
 import { AppError } from "./http";
+import { isSelfAddressed } from "./mail-recipient";
 
 const attachmentSchema = z.object({
   id: z.string(),
@@ -106,22 +107,24 @@ export function freezeBatch(user: Session, input: BatchInput, sender: string) {
           "Only one selected draft per recipient is allowed.",
         );
       recipients.add(recipient);
-      const researcher = storedResearcher(draft.researcherId);
-      if (!canEmail(researcher))
-        throw new AppError(
-          "CONTACT_ROUTE",
-          "A selected researcher no longer has an eligible email contact route.",
-          409,
-        );
-      if (
-        !draft.recipientEdited &&
-        researcher.contact.email?.toLowerCase() !== recipient
-      )
-        throw new AppError(
-          "RECIPIENT_CHANGED",
-          "A recipient differs from its source. Review and confirm the edited address.",
-          409,
-        );
+      if (!isSelfAddressed(draft, identity.email)) {
+        const researcher = storedResearcher(draft.researcherId);
+        if (!canEmail(researcher))
+          throw new AppError(
+            "CONTACT_ROUTE",
+            "A selected researcher no longer has an eligible email contact route.",
+            409,
+          );
+        if (
+          !draft.recipientEdited &&
+          researcher.contact.email?.toLowerCase() !== recipient
+        )
+          throw new AppError(
+            "RECIPIENT_CHANGED",
+            "A recipient differs from its source. Review and confirm the edited address.",
+            409,
+          );
+      }
       const duplicate = db()
         .prepare(
           "SELECT id FROM deliveries WHERE session_id=? AND account_id=? AND draft_id=? AND state IN ('queued','submitting','accepted','unknown')",
@@ -232,9 +235,13 @@ export async function processBatch(
     .all(batchId) as unknown as DeliveryRow[];
   for (const message of messages) {
     if (onlyId && message.id !== onlyId) continue;
-    if (preflight) {
+    const draft = unseal<Draft>(message.snapshot);
+    // This sender was bound to a verified identity when the snapshot was frozen.
+    // Self-addressed tests do not depend on a professor's source or affiliation.
+    // Account and Outlook authorization are still checked before submission.
+    if (preflight && !isSelfAddressed(draft, message.sender)) {
       try {
-        await preflight(unseal<Draft>(message.snapshot));
+        await preflight(draft);
       } catch (error) {
         db()
           .prepare(
@@ -257,7 +264,10 @@ export async function processBatch(
     try {
       if (!user) throw new Error("Expired session");
       const identity = verifiedIdentity(user);
-      if (identity.accountId !== message.account_id)
+      if (
+        identity.accountId !== message.account_id ||
+        identity.email !== message.sender
+      )
         throw new Error("Account changed");
       email = identity.email;
     } catch {
@@ -281,7 +291,7 @@ export async function processBatch(
         id: `${message.id}-${message.attempt + 1}`,
         sender: message.sender,
         replyTo: email,
-        draft: unseal<Draft>(message.snapshot),
+        draft,
         attachments: unseal<FrozenAttachment[]>(message.attachments),
       });
     } catch {
@@ -333,7 +343,10 @@ export function resumeDelivery(user: Session, id: string) {
         409,
       );
     const draft = unseal<Draft>(row.snapshot);
-    if (!canEmail(storedResearcher(draft.researcherId)))
+    if (
+      !isSelfAddressed(draft, identity.email) &&
+      !canEmail(storedResearcher(draft.researcherId))
+    )
       throw new AppError(
         "CONTACT_ROUTE",
         "Check this researcher's current contact route before creating a new batch.",

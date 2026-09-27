@@ -1,99 +1,77 @@
 "use client";
-import { useRef, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  ArrowRight,
-  MagnifyingGlass,
-  Paperclip,
-  ArrowUpRight,
-  X,
-  Scales,
-  SlidersHorizontal,
-  BookOpen,
-  ArrowCounterClockwise,
-} from "@phosphor-icons/react";
-import { ResumeReview } from "./resume-review";
-import {
-  Badge,
-  Button,
-  EmptyState,
-  Field,
-  IconButton,
-  Notice,
-  Select,
-  Textarea,
-} from "@/components/ui";
+import { ArrowRight, Paperclip, X } from "@phosphor-icons/react";
+import { Button, Field, Select, Textarea, Notice } from "@/components/ui";
 import { useWorkspace } from "./provider";
-import { ResearchCard } from "./research-card";
-import { ResearcherDialog } from "./researcher-dialog";
-
+import { useLocale } from "../locale";
+import { errorCopy } from "@/lib/error-copy";
+import { ResumeReview } from "./resume-review";
+import { CatalogCoverageBanner } from "./catalog-coverage";
 export function SearchView() {
   const { workspace: w, setWorkspace, notify, jobs } = useWorkspace();
-  const [input, setInput] = useState(w.query);
-  const [detail, setDetail] = useState<string | null>(null);
+  const { t, locale } = useLocale();
+  const router = useRouter();
+  // Keep the editable draft separate from the last submitted search. In
+  // particular, an intentionally empty draft must not fall back to that query.
+  const input = w.interestDraft ?? w.query;
+  const setInput = (value: string) =>
+    setWorkspace((p) => ({ ...p, interestDraft: value }));
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
+  const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  const params = useSearchParams();
-  useEffect(() => {
-    if (w.search) setInput(w.search.query);
-  }, [w.search?.id]);
-  useEffect(() => {
-    if (params.get("researcher")) setDetail(params.get("researcher"));
-  }, [params]);
+  const interestRef = useRef<HTMLTextAreaElement>(null);
+  const background = (key: keyof typeof w.background, value: string) =>
+    setWorkspace((p) => ({
+      ...p,
+      background: { ...p.background, [key]: value },
+    }));
   const submit = (query: string) => {
-    if (!query.trim() || jobs.searchStage) return;
-    setInput(query);
+    if (
+      query.trim().length < 2 ||
+      query.trim().length > 3000 ||
+      jobs.searchStage ||
+      uploading
+    )
+      return;
+    setWorkspace((p) => ({
+      ...p,
+      query: query.trim(),
+      interestDraft: query.trim(),
+    }));
     void jobs.search(query);
+    router.push("/explore/results");
   };
-  const researchers = w.search?.researchers || [];
-  const topics = w.search?.directions || [];
-  const found = researchers.filter(
-    (r) =>
-      !w.topics.length ||
-      (w.matchAll
-        ? w.topics.every((t) => r.topics.includes(t))
-        : w.topics.some((t) => r.topics.includes(t))),
-  );
-  const filtered = found.filter(
-    (r) =>
-      (!w.department || r.department === w.department) &&
-      (!w.recruitment || r.recruitment === w.recruitment) &&
-      (!w.creditOnly || r.credit.value === "supported"),
-  );
   const upload = async (file?: File) => {
     if (!file) return;
-    setUploadError("");
     if (file.size > 10 * 1024 * 1024) {
-      setUploadError(
-        "Choose a file smaller than 10 MB, or paste the text below.",
+      setError(
+        t("Choose a file smaller than 10 MB.", "请选择小于 10 MB 的文件。"),
       );
       return;
     }
     setUploading(true);
+    setError("");
     try {
       const form = new FormData();
       form.set("file", file);
-      const response = await fetch("/api/resume", {
+      const res = await fetch("/api/resume", {
         method: "POST",
         body: form,
+        signal: AbortSignal.timeout(30000),
       });
-      const result = await response.json();
-      if (!response.ok)
-        throw new Error(result.error || "Could not read this file.");
-      setWorkspace((p) => ({
-        ...p,
-        background: { ...p.background, resumeText: result.text },
-      }));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      background("resumeText", data.text);
       notify(
-        "Résumé text extracted. Review it below; choose your interests yourself.",
+        t("Résumé text is ready for your review.", "简历文字已提取，请确认。"),
       );
-    } catch (error) {
-      setUploadError(
-        error instanceof Error
-          ? error.message
-          : "Could not read this file. Paste the text or continue with your interests.",
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? errorCopy(e.message, locale)
+          : t("Could not read the file.", "无法读取文件。"),
       );
     } finally {
       setUploading(false);
@@ -101,437 +79,218 @@ export function SearchView() {
     }
   };
   return (
-    <>
-      <div
-        className={
-          w.searched ? "explore-heading results-heading" : "explore-heading"
-        }
-      >
-        <p className="eyebrow">Start with curiosity</p>
-        <h1>
-          {w.searched
-            ? "Follow what interests you."
-            : "What are you curious about?"}
-        </h1>
+    <div className="intake-page">
+      <div className="explore-heading">
+        <h1>{t("What are you curious about?", "你对什么研究感兴趣？")}</h1>
         <p>
-          {w.searched
-            ? "Read the questions. Find a connection. Make the choice yours."
-            : "A topic, a question, or a researcher’s name. You do not need to have it all figured out."}
+          {t(
+            "Describe a topic, a question, or a researcher. We’ll explore the connections.",
+            "输入研究方向、具体问题或教授姓名，探索适合你的研究。",
+          )}
         </p>
       </div>
-      <div className="search-section">
-        <form
-          className="search-composer"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit(input);
-          }}
-        >
-          <label htmlFor="interest" className="sr-only">
-            What are you curious about?
-          </label>
-          <textarea
-            id="interest"
-            disabled={!!jobs.searchStage}
-            maxLength={3000}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="I’m interested in AI and how people learn…"
-            rows={2}
-          />
-          <div className="composer-footer">
-            <Button
-              variant="ghost"
-              disabled={uploading || !!jobs.searchStage}
-              onClick={() => fileRef.current?.click()}
-            >
-              <Paperclip size={19} />
-              {uploading ? "Reading résumé…" : "Add résumé"}
-              <span className="optional-label">optional</span>
-            </Button>
+      {jobs.searchStage && (
+        <Notice>
+          <Link href="/explore/results">
+            {t(
+              "A search is running. View its progress →",
+              "搜索正在进行，查看进度 →",
+            )}
+          </Link>
+        </Notice>
+      )}
+      <form
+        className="search-intake"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit(input);
+        }}
+      >
+        <div className="search-primary">
+          <section className="search-composer" aria-labelledby="interest-label">
+            <div className="section-heading">
+              <label htmlFor="interest" id="interest-label">
+                {t("Your research interests", "你的研究兴趣")}
+              </label>
+              <p className="interest-hint" id="interest-hint">
+                {t(
+                  "Write in English or Chinese. A sentence is enough to start.",
+                  "支持中文或英文，从一句话开始就好。",
+                )}
+              </p>
+            </div>
+            <div className="interest-editor">
+              <textarea
+                ref={interestRef}
+                id="interest"
+                value={input}
+                maxLength={3000}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={t(
+                  "I’m interested in AI agents and how people learn…",
+                  "例如：我对 AI 智能体和教育方向感兴趣……",
+                )}
+                rows={6}
+                aria-describedby="interest-hint"
+                aria-invalid={input.trim().length > 3000 || undefined}
+              />
+              <Button
+                variant="ghost"
+                className="interest-clear"
+                disabled={!input.length}
+                aria-label={t("Clear research interests", "清空研究兴趣")}
+                onClick={() => {
+                  setInput("");
+                  interestRef.current?.focus();
+                }}
+              >
+                <X size={15} aria-hidden />
+                {t("Clear", "一键清除")}
+              </Button>
+            </div>
+            {input.trim().length > 3000 && (
+              <p role="alert">
+                {t(
+                  "Keep your interests within 3,000 characters before searching.",
+                  "请将研究兴趣缩减到 3,000 个字符以内后再搜索。",
+                )}
+              </p>
+            )}
+          </section>
+          <div className="intake-submit">
             <Button
               type="submit"
-              disabled={!input.trim() || !!jobs.searchStage}
+              disabled={
+                input.trim().length < 2 ||
+                input.trim().length > 3000 ||
+                !!jobs.searchStage ||
+                uploading
+              }
             >
-              {jobs.searchStage ? "Searching…" : "Explore research"}{" "}
-              <ArrowRight size={18} />
+              {t("Explore research", "开始探索研究")}
+              <ArrowRight size={20} />
             </Button>
           </div>
-        </form>
-        <input
-          type="file"
-          ref={fileRef}
-          accept=".pdf,.docx,.txt"
-          className="sr-only"
-          tabIndex={-1}
-          aria-label="Upload résumé"
-          onChange={(e) => upload(e.target.files?.[0])}
-        />
-        <p className="input-help">
-          English or 中文. Your interests lead; your major does not limit the
-          search.
-        </p>
-        {jobs.searchStage && (
-          <Notice>
-            {jobs.searchStage}… You can leave this page and return while the
-            request runs.
-          </Notice>
-        )}
-        {jobs.searchError && (
-          <Notice tone="error">
-            {jobs.searchError} Previous successful results remain below.
-          </Notice>
-        )}
-        {uploadError && (
-          <Notice tone="error">
-            {uploadError} You can paste résumé text in optional background.
-          </Notice>
-        )}
-        <details
-          className="background-details"
-          open={w.background.resumeText ? true : undefined}
+          {w.search && (
+            <Link className="quiet-link" href="/explore/results">
+              {t("Return to your last results", "返回上次搜索结果")} →
+            </Link>
+          )}
+        </div>
+        <section
+          className="background-panel"
+          aria-labelledby="background-heading"
         >
-          <summary>
-            Add a little background <span>Optional</span>
-          </summary>
+          <div className="section-heading">
+            <h2 id="background-heading">
+              {t("A little about you", "补充一点你的背景")}
+            </h2>
+            <span>
+              {t(
+                "Optional · helps personalize your emails",
+                "选填 · 帮你准备更贴合自身的邮件",
+              )}
+            </span>
+          </div>
           <div className="background-fields">
             <Field
               id="student-name"
-              label="Your name"
+              label={t("Your name", "姓名")}
               value={w.background.name}
-              onChange={(e) =>
-                setWorkspace((p) => ({
-                  ...p,
-                  background: { ...p.background, name: e.target.value },
-                }))
-              }
+              onChange={(e) => background("name", e.target.value)}
             />
             <Field
               id="major"
-              label="Major or area of study"
+              label={t("Major or area of study", "专业或学习领域")}
               value={w.background.major}
-              onChange={(e) =>
-                setWorkspace((p) => ({
-                  ...p,
-                  background: { ...p.background, major: e.target.value },
-                }))
-              }
+              onChange={(e) => background("major", e.target.value)}
             />
             <Select
               id="year"
-              label="Year"
+              label={t("Year", "年级")}
               value={w.background.year}
-              onChange={(e) =>
-                setWorkspace((p) => ({
-                  ...p,
-                  background: { ...p.background, year: e.target.value },
-                }))
-              }
+              onChange={(e) => background("year", e.target.value)}
             >
-              <option value="">Not specified</option>
+              <option value="">{t("Not specified", "暂不填写")}</option>
               {[
-                "first-year",
-                "second-year",
-                "third-year",
-                "fourth-year",
-                "graduate",
-              ].map((v) => (
-                <option key={v}>{v}</option>
+                ["first-year", "大一"],
+                ["second-year", "大二"],
+                ["third-year", "大三"],
+                ["fourth-year", "大四"],
+                ["graduate", "研究生"],
+              ].map(([en, zh]) => (
+                <option key={en} value={en}>
+                  {t(en, zh)}
+                </option>
               ))}
             </Select>
           </div>
           <Textarea
-            id="resume-text"
-            label="Résumé text for your review"
-            hint="Extraction does not confirm experience or choose interests. The original file is not retained. Only text you keep here is saved in this browser."
-            rows={4}
-            value={w.background.resumeText}
-            onChange={(e) =>
-              setWorkspace((p) => ({
-                ...p,
-                background: { ...p.background, resumeText: e.target.value },
-              }))
-            }
-          />
-          <ResumeReview onInterest={setInput} />
-          <Textarea
             id="confirmed-experience"
-            label="Experience you want to mention"
-            hint="Only information you confirm here is used in email drafts."
-            rows={3}
+            label={t("Experience you want to mention", "想提及的经历")}
+            rows={2}
+            placeholder={t(
+              "A course, project, skill, or your first research experience.",
+              "课程、项目、技能，或说明这是你第一次尝试研究。",
+            )}
             value={w.background.experience}
-            onChange={(e) =>
-              setWorkspace((p) => ({
-                ...p,
-                background: { ...p.background, experience: e.target.value },
-              }))
-            }
+            onChange={(e) => background("experience", e.target.value)}
           />
-          {w.background.resumeText && (
+          <div className="resume-upload-row">
             <Button
-              variant="ghost"
-              onClick={() =>
-                setWorkspace((p) => ({
-                  ...p,
-                  background: { ...p.background, resumeText: "" },
-                }))
-              }
+              variant="secondary"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
             >
-              Remove résumé text
+              <Paperclip size={21} />
+              {uploading
+                ? t("Reading résumé…", "正在读取简历…")
+                : t("Upload résumé", "上传简历")}
             </Button>
-          )}
-        </details>
-      </div>
-      {!w.search && (
-        <>
-          <div className="starter-suggestions">
-            <span>Try a starting point</span>
-            {["AI", "Robotics", "Accessibility", "AI and education"].map(
-              (s) => (
-                <button
-                  key={s}
-                  disabled={!!jobs.searchStage}
-                  onClick={() => submit(s)}
-                >
-                  {s}
-                  <ArrowUpRight size={14} />
-                </button>
-              ),
-            )}
+            <span>
+              {t(
+                "PDF, DOCX or TXT · up to 10 MB",
+                "PDF、DOCX 或 TXT · 最大 10 MB",
+              )}
+            </span>
           </div>
-          <div className="explore-intro">
-            <BookOpen size={34} weight="duotone" />
-            <h2>
-              You bring the question.
-              <br />
-              We help you explore it.
-            </h2>
-            <p>
-              Explore public UW research sources, then save and compare research
-              that catches your attention.
-            </p>
-          </div>
-        </>
-      )}
-      <div className="collection-notice">
-        <BookOpen size={17} />
-        <p>
-          {w.search ? (
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.docx,.txt"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label={t("Upload résumé", "上传简历")}
+            onChange={(e) => upload(e.target.files?.[0])}
+          />
+          {error && <Notice tone="error">{error}</Notice>}
+          {w.background.resumeText && (
             <>
-              <strong>
-                {w.search.cached
-                  ? "Cached source review."
-                  : "Sources reviewed."}
-              </strong>{" "}
-              {w.search.interpretation} Checked{" "}
-              {new Date(w.search.checkedAt).toLocaleDateString()}. Results cover
-              the sources found for this query, not every UW researcher.
-            </>
-          ) : (
-            <>
-              <strong>Across UW-Madison.</strong> Search public university and
-              linked lab pages across departments. Results are checked against
-              retrieved sources; a research interest does not imply an open
-              position.
+              <Textarea
+                id="resume-text"
+                label={t("Review extracted résumé text", "核对简历文字")}
+                rows={4}
+                value={w.background.resumeText}
+                onChange={(e) => background("resumeText", e.target.value)}
+              />
+              <ResumeReview onInterest={setInput} />
+              <Button
+                variant="ghost"
+                onClick={() => background("resumeText", "")}
+              >
+                {t("Remove résumé text", "移除简历文字")}
+              </Button>
             </>
           )}
-        </p>
-      </div>
-      {w.search && (
-        <>
-          {w.search.warnings.map((warning, i) => (
-            <Notice key={i}>{warning}</Notice>
-          ))}
-          {topics.length > 1 && (
-            <section className="directions-section">
-              <div className="row between">
-                <h2>
-                  {w.search.broad
-                    ? "A few directions to explore"
-                    : "Your interests can overlap"}
-                </h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setWorkspace((p) => ({ ...p, topics: [], matchAll: false }))
-                  }
-                >
-                  Show all matches
-                </Button>
-              </div>
-              <div className="direction-grid">
-                {topics.map((t) => (
-                  <button
-                    className={
-                      w.topics.includes(t.id)
-                        ? "direction-card selected"
-                        : "direction-card"
-                    }
-                    key={t.id}
-                    aria-pressed={w.topics.includes(t.id)}
-                    onClick={() =>
-                      setWorkspace((p) => ({
-                        ...p,
-                        topics: p.topics.includes(t.id)
-                          ? p.topics.filter((x) => x !== t.id)
-                          : [...p.topics, t.id],
-                      }))
-                    }
-                  >
-                    <span>
-                      {t.title}
-                      <ArrowUpRight size={16} />
-                    </span>
-                    <p>{t.question}</p>
-                    <small>
-                      {researchers.find((r) => r.topics.includes(t.id))?.name}
-                    </small>
-                  </button>
-                ))}
-              </div>
-              {w.topics.length > 1 && (
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={w.matchAll}
-                    onChange={(e) =>
-                      setWorkspace((p) => ({
-                        ...p,
-                        matchAll: e.target.checked,
-                      }))
-                    }
-                  />
-                  Only show researchers connected to all selected interests
-                </label>
-              )}
-            </section>
-          )}
-          <section className="results-section">
-            <div className="results-title row between">
-              <div>
-                <h2>Research worth getting to know</h2>
-                <p>
-                  <strong>{filtered.length}</strong>{" "}
-                  {filtered.length === 1 ? "researcher" : "researchers"} in the
-                  results ·{" "}
-                  {w.topics.length
-                    ? topics
-                        .filter((t) => w.topics.includes(t.id))
-                        .map((t) => t.title)
-                        .join(", ")
-                    : w.query}
-                </p>
-              </div>
-              <Badge>Source-backed results</Badge>
-            </div>
-            <div className="filter-bar">
-              <SlidersHorizontal size={20} />
-              <Select
-                id="department"
-                label="Department"
-                value={w.department}
-                onChange={(e) =>
-                  setWorkspace((p) => ({ ...p, department: e.target.value }))
-                }
-              >
-                <option value="">All departments</option>
-                {[...new Set(researchers.map((r) => r.department))].map((d) => (
-                  <option key={d}>{d}</option>
-                ))}
-              </Select>
-              <Select
-                id="recruitment"
-                label="Openings"
-                value={w.recruitment}
-                onChange={(e) =>
-                  setWorkspace((p) => ({ ...p, recruitment: e.target.value }))
-                }
-              >
-                <option value="">All statuses</option>
-                <option value="open">Applications open</option>
-                <option value="unknown">Not stated</option>
-                <option value="closed">No current openings</option>
-              </Select>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={w.creditOnly}
-                  onChange={(e) =>
-                    setWorkspace((p) => ({
-                      ...p,
-                      creditOnly: e.target.checked,
-                    }))
-                  }
-                />
-                Credit explicitly supported
-              </label>
-              {(w.department || w.recruitment || w.creditOnly) && (
-                <IconButton
-                  label="Clear filters"
-                  onClick={() =>
-                    setWorkspace((p) => ({
-                      ...p,
-                      department: "",
-                      recruitment: "",
-                      creditOnly: false,
-                    }))
-                  }
-                >
-                  <ArrowCounterClockwise size={18} />
-                </IconButton>
-              )}
-            </div>
-            {w.creditOnly && (
-              <Notice>
-                {found.filter((r) => r.credit.value === "unknown").length}{" "}
-                records with unknown credit arrangements are excluded by this
-                filter.
-              </Notice>
+          <p className="background-privacy">
+            {t(
+              "Your major won’t limit the search. Background stays in this browser until you choose to use AI.",
+              "专业不会限制搜索范围。背景保存在当前浏览器中，使用 AI 功能时才会提交所需信息。",
             )}
-            {filtered.length ? (
-              <div className="research-grid">
-                {filtered.map((r) => (
-                  <ResearchCard key={r.id} researcher={r} onOpen={setDetail} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={<MagnifyingGlass size={32} />}
-                title="No verified matches for these filters"
-                action={
-                  <Button
-                    variant="secondary"
-                    disabled={!!jobs.searchStage}
-                    onClick={() => submit(input)}
-                  >
-                    Search again
-                  </Button>
-                }
-              >
-                Try a different topic or remove filters. This does not mean
-                there is no related research at UW-Madison.
-              </EmptyState>
-            )}
-          </section>
-        </>
-      )}
-      {w.comparison.length > 0 && (
-        <div className="compare-tray">
-          <Scales size={21} />
-          <span>{w.comparison.length} selected for comparison</span>
-          <Link className="button button-primary" href="/explore/compare">
-            Compare <ArrowRight size={17} />
-          </Link>
-          <IconButton
-            label="Clear comparison"
-            onClick={() => setWorkspace((p) => ({ ...p, comparison: [] }))}
-          >
-            <X size={18} />
-          </IconButton>
-        </div>
-      )}
-      <ResearcherDialog id={detail} onClose={() => setDetail(null)} />
-    </>
+          </p>
+        </section>
+      </form>
+      <CatalogCoverageBanner compact />
+    </div>
   );
 }

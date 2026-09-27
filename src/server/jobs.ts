@@ -32,8 +32,12 @@ export async function runJob(
     progress: (stage: string, partial?: unknown) => void,
   ) => Promise<unknown>,
 ) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await work((stage, partial) => {
+    const running = work((stage, partial) => {
+      const current = db().prepare("SELECT state FROM jobs WHERE id=?").get(id);
+      if (current?.state !== "running")
+        throw new AppError("JOB_STOPPED", "This task has stopped.");
       db()
         .prepare(
           "UPDATE jobs SET stage=?,updated_at=?,payload=COALESCE(?,payload) WHERE id=? AND state='running'",
@@ -45,6 +49,21 @@ export async function runJob(
           id,
         );
     });
+    const result = await Promise.race([
+      running,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new AppError(
+                "JOB_TIMEOUT",
+                "The search took too long. Please try a more specific question.",
+              ),
+            ),
+          540000,
+        );
+      }),
+    ]);
     db()
       .prepare(
         "UPDATE jobs SET state='succeeded',stage='Complete',payload=?,updated_at=? WHERE id=? AND state='running'",
@@ -62,7 +81,18 @@ export async function runJob(
         Date.now(),
         id,
       );
+  } finally {
+    clearTimeout(timer);
   }
+}
+export function stopJob(id: string, sessionId: string) {
+  getJob(id, sessionId);
+  db()
+    .prepare(
+      "UPDATE jobs SET state='failed',stage='Stopped',error='This task was cancelled.',updated_at=? WHERE id=? AND session_id=? AND state='running'",
+    )
+    .run(Date.now(), id, sessionId);
+  return getJob(id, sessionId);
 }
 export function getJob(id: string, sessionId: string): JobStatus {
   const row = db()
@@ -76,6 +106,7 @@ export function getJob(id: string, sessionId: string): JobStatus {
         payload: string | null;
         error: string | null;
         updated_at: number;
+        created_at: number;
       }
     | undefined;
   if (!row)
@@ -84,7 +115,11 @@ export function getJob(id: string, sessionId: string): JobStatus {
       "This task does not belong to your session or has expired.",
       404,
     );
-  if (row.state === "running" && row.updated_at < Date.now() - 300000) {
+  if (
+    row.state === "running" &&
+    (row.updated_at < Date.now() - 300000 ||
+      row.created_at < Date.now() - 540000)
+  ) {
     row.state = "failed";
     row.error =
       "The server was interrupted or the request timed out. Please retry.";
@@ -99,6 +134,7 @@ export function getJob(id: string, sessionId: string): JobStatus {
     kind: row.kind,
     state: row.state,
     stage: row.stage,
+    startedAt: row.created_at,
     ...(row.payload ? { result: JSON.parse(row.payload) } : {}),
     ...(row.error ? { error: row.error } : {}),
   };

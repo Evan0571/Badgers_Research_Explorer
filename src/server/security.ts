@@ -61,7 +61,7 @@ export function rateLimit(key: string, max: number, periodMs: number) {
     if (current && current.started + periodMs > now && current.count >= max)
       throw new AppError(
         "RATE_LIMIT",
-        "Too many requests. Please wait before trying again.",
+        `Too many requests. Try again in ${Math.ceil((current.started + periodMs - now) / 60000)} minutes. You can still browse the catalog and use saved results.`,
         429,
       );
     db()
@@ -110,8 +110,4 @@ export const codeDigest = (sessionId: string, email: string, code: string) =>
   createHmac("sha256", encryptionKey())
     .update(`${sessionId}:${email}:${code}`)
     .digest("hex");
-export function isUWEmail(email: string) {
-  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[a-z0-9-]+\.)*wisc\.edu$/i.test(
-    email,
-  );
-}
+export { isUWEmail } from "@/lib/uw-email";

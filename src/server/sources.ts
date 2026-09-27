@@ -1,3 +1,4 @@
+import { sourceEmails } from "./email-evidence";
 import https from "node:https";
 import { lookup } from "node:dns/promises";
 import { isIP, BlockList } from "node:net";
@@ -58,13 +59,17 @@ export function safeURL(raw: string) {
   url.hash = "";
   return url;
 }
-async function download(url: URL): Promise<{
+async function download(
+  url: URL,
+  signal?: AbortSignal,
+): Promise<{
   status: number;
   location?: string;
   contentType: string;
   html: string;
 }> {
   const addresses = await lookup(url.hostname, { all: true });
+  signal?.throwIfAborted();
   if (!addresses.length || addresses.some((a) => !publicAddress(a.address)))
     throw new AppError("SOURCE_ADDRESS", "The source address is not public.");
   const address = addresses.find((a) => a.family === 4) || addresses[0];
@@ -82,7 +87,9 @@ async function download(url: URL): Promise<{
           if (options.all) callback(null, [address]);
           else callback(null, address.address, address.family);
         },
-        signal: AbortSignal.timeout(10000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(10000)])
+          : AbortSignal.timeout(10000),
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -113,19 +120,24 @@ export interface SourceDocument {
   text: string;
   links: string[];
   checkedAt: string;
+  emails?: string[];
+  linkLabels?: { url: string; label: string; navigation?: boolean }[];
+  truncated?: boolean;
 }
 export async function readSource(
   raw: string,
   allowedHosts: Set<string>,
+  signal?: AbortSignal,
 ): Promise<SourceDocument> {
   let url = safeURL(raw);
   for (let count = 0; count < 4; count++) {
+    signal?.throwIfAborted();
     if (!allowedHosts.has(url.hostname))
       throw new AppError(
         "SOURCE_REDIRECT",
         "A source redirected to an unverified website.",
       );
-    const result = await download(url);
+    const result = await download(url, signal);
     if ([301, 302, 303, 307, 308].includes(result.status) && result.location) {
       url = safeURL(new URL(result.location, url).href);
       continue;
@@ -136,23 +148,64 @@ export async function readSource(
     )
       throw new AppError("SOURCE_UNAVAILABLE", "A source could not be read.");
     const $ = load(result.html);
-    const title = $("title").text().trim().slice(0, 200);
+    const title = $("head > title").first().text().trim().slice(0, 200);
     const links = [
       ...new Set(
         $("a[href]")
           .toArray()
           .flatMap((a) => {
             try {
-              return [safeURL(new URL($(a).attr("href")!, url).href).href];
+              return [
+                safeURL(
+                  new URL($(a).attr("href")!, url).href.replace(
+                    /^http:/,
+                    "https:",
+                  ),
+                ).href,
+              ];
             } catch {
               return [];
             }
           }),
       ),
     ];
+    const linkLabels = $("a[href]")
+      .toArray()
+      .flatMap((a) => {
+        try {
+          return [
+            {
+              url: safeURL(
+                new URL($(a).attr("href")!, url).href.replace(
+                  /^http:/,
+                  "https:",
+                ),
+              ).href,
+              label: $(a).text().replace(/\s+/g, " ").trim(),
+              navigation:
+                $(a).closest('nav,header,footer,[role="navigation"]').length >
+                0,
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
+    const mailtos = $("a[href^='mailto:']")
+      .toArray()
+      .map((a) => {
+        try {
+          return decodeURIComponent($(a).attr("href")!.slice(7).split("?")[0]);
+        } catch {
+          return "";
+        }
+      });
     $("script,style,noscript,svg,nav,footer,header").remove();
-    const text = $("body").text().replace(/\s+/g, " ").trim().slice(0, 30000);
-    if (text.length < 150)
+    $("br").replaceWith(" ");
+    $("h1,h2,h3,h4,p,div,li,section,article,dt,dd,td,a").append(" ");
+    const fullText = $("body").text().replace(/\s+/g, " ").trim();
+    const text = fullText.slice(0, 100000);
+    if (text.length < (isUniversityURL(url.href) ? 60 : 150))
       throw new AppError(
         "SOURCE_EMPTY",
         "A source did not contain enough readable text.",
@@ -162,7 +215,10 @@ export async function readSource(
       url: url.href,
       title,
       text,
+      emails: sourceEmails(text, mailtos),
       links,
+      linkLabels,
+      truncated: fullText.length > text.length,
       checkedAt: new Date().toISOString(),
     };
   }

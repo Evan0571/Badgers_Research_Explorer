@@ -1,3 +1,7 @@
+import type {
+  UndergraduateReview,
+  UndergraduateFilters,
+} from "./undergraduate";
 export type ConditionValue = "supported" | "not-supported" | "unknown";
 export type Recruitment = "open" | "closed" | "unknown";
 export type ContactRoute = "email" | "form" | "program" | "website" | "closed";
@@ -24,6 +28,7 @@ export interface Researcher {
   department: string;
   lab: string;
   title: string;
+  academicTitle?: string;
   summary: string;
   summaryZh: string;
   question: string;
@@ -45,6 +50,26 @@ export interface Researcher {
   sources: Source[];
   relevance?: string;
   provenance?: "live" | "sample";
+  supersededBy?: string;
+  undergraduate?: UndergraduateReview;
+  publications?: { title: string; year: number | null; url?: string }[];
+  coverage?: {
+    level: "roster" | "research-index" | "profile";
+    rosterKey: string;
+    rosterCheckedAt: string;
+    researchCheckedAt?: string;
+    profileCheckedAt?: string;
+    category:
+      | "faculty"
+      | "clinical"
+      | "teaching"
+      | "adjunct"
+      | "visiting"
+      | "emeritus"
+      | "other";
+    platformId?: number;
+    contactChecked: boolean;
+  };
 }
 export interface Background {
   name: string;
@@ -79,11 +104,14 @@ export interface DeliverySnapshot {
 export interface Workspace {
   version: 1;
   query: string;
+  /** Editable draft; an empty string means deliberately cleared. */
+  interestDraft?: string;
   searched: boolean;
   topics: Topic[];
   matchAll: boolean;
   department: string;
   recruitment: string;
+  undergraduateFilters?: UndergraduateFilters;
   creditOnly: boolean;
   saved: string[];
   comparison: string[];

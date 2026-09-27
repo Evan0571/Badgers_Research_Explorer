@@ -1,3 +1,4 @@
+import { hasEmail } from "./email-evidence";
 import { z } from "zod";
 import type { Draft } from "@/lib/types";
 import { storedResearcher } from "./discovery";
@@ -33,9 +34,7 @@ export async function checkContactBeforeSending(draft: Draft) {
     );
   }
   const evidence = documents.find((d) =>
-    d.text
-      .toLowerCase()
-      .includes(researcher.contact.email?.toLowerCase() || "__no_email__"),
+    hasEmail(d, researcher.contact.email || "__no_email__"),
   );
   if (!evidence)
     throw new AppError(

@@ -19,6 +19,12 @@ export async function response(
   input: string,
   format?: object,
   web = false,
+  timeoutMs = 120000,
+  options: {
+    allowedDomains?: string[];
+    maxOutputTokens?: number;
+    signal?: AbortSignal;
+  } = {},
 ) {
   const c = config();
   if (!c.apiKey)
@@ -40,14 +46,22 @@ export async function response(
         store: false,
         instructions,
         input,
-        max_output_tokens: 12000,
+        max_output_tokens: options.maxOutputTokens || 12000,
         ...(format ? { text: { format } } : {}),
         ...(web
           ? {
               tools: [
                 {
                   type: "web_search",
-                  filters: { allowed_domains: ["wisc.edu"] },
+                  ...((options.allowedDomains || ["wisc.edu"]).length
+                    ? {
+                        filters: {
+                          allowed_domains: options.allowedDomains || [
+                            "wisc.edu",
+                          ],
+                        },
+                      }
+                    : {}),
                 },
               ],
               tool_choice: "required",
@@ -55,23 +69,37 @@ export async function response(
             }
           : {}),
       }),
-      signal: AbortSignal.timeout(120000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs),
     });
   } catch {
+    options.signal?.throwIfAborted();
     throw new AppError(
       "AI_TIMEOUT",
       "The AI service did not finish in time. Your previous results are preserved.",
       504,
     );
   }
-  if (!result.ok)
+  if (!result.ok) {
+    const errorBody = (await result.json().catch(() => null)) as {
+      error?: { code?: string; type?: string };
+    } | null;
+    const providerCode = (
+      errorBody?.error?.code ||
+      errorBody?.error?.type ||
+      "unknown"
+    )
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .slice(0, 80);
     throw new AppError(
-      "AI_PROVIDER",
+      result.status === 429 ? "AI_RATE_LIMIT" : "AI_PROVIDER",
       result.status === 429
-        ? "The AI service reached its usage limit. Try again later."
-        : "The AI service rejected this request. Check the server API key and model access.",
+        ? `The AI service reached its usage limit (${providerCode}). Try again later.`
+        : `The AI service rejected this request (HTTP ${result.status}; ${providerCode}). Check the server API key and model access.`,
       502,
     );
+  }
   const body = (await result.json()) as AIResponse;
   if (body.status !== "completed")
     throw new AppError(
@@ -115,13 +143,23 @@ export async function structured<T>(
   schema: z.ZodType<T>,
   instructions: string,
   data: unknown,
+  timeoutMs = 120000,
+  signal?: AbortSignal,
+  options: { maxOutputTokens?: number } = {},
 ): Promise<T> {
-  const { text } = await response(instructions, JSON.stringify(data), {
-    type: "json_schema",
-    name,
-    strict: true,
-    schema: z.toJSONSchema(schema),
-  });
+  const { text } = await response(
+    instructions,
+    JSON.stringify(data),
+    {
+      type: "json_schema",
+      name,
+      strict: true,
+      schema: z.toJSONSchema(schema),
+    },
+    false,
+    timeoutMs,
+    { signal, ...options },
+  );
   try {
     return schema.parse(JSON.parse(text));
   } catch {

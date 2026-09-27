@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { undergraduateReviewSchema } from "./undergraduate";
 
 export const backgroundSchema = z.object({
   name: z.string().max(200),
@@ -29,6 +30,7 @@ export const researcherSchema = z.object({
   department: z.string(),
   lab: z.string(),
   title: z.string(),
+  academicTitle: z.string().optional(),
   summary: z.string(),
   summaryZh: z.string(),
   question: z.string(),
@@ -50,6 +52,37 @@ export const researcherSchema = z.object({
   sources: z.array(sourceSchema),
   relevance: z.string().optional(),
   provenance: z.enum(["live", "sample"]).optional(),
+  supersededBy: z.string().optional(),
+  undergraduate: undergraduateReviewSchema.optional(),
+  publications: z
+    .array(
+      z.object({
+        title: z.string(),
+        year: z.number().nullable(),
+        url: z.url().optional(),
+      }),
+    )
+    .optional(),
+  coverage: z
+    .object({
+      level: z.enum(["roster", "research-index", "profile"]),
+      rosterKey: z.string(),
+      rosterCheckedAt: z.string(),
+      researchCheckedAt: z.string().optional(),
+      profileCheckedAt: z.string().optional(),
+      category: z.enum([
+        "faculty",
+        "clinical",
+        "teaching",
+        "adjunct",
+        "visiting",
+        "emeritus",
+        "other",
+      ]),
+      platformId: z.number().optional(),
+      contactChecked: z.boolean(),
+    })
+    .optional(),
 });
 export const directionSchema = z.object({
   id: z.string(),
@@ -59,6 +92,8 @@ export const directionSchema = z.object({
   keywords: z.array(z.string()),
 });
 export const searchResultSchema = z.object({
+  webSearchStatus: z.enum(["complete", "timed-out", "unavailable"]).optional(),
+  outcome: z.enum(["matches", "empty", "needs-clarification"]).optional(),
   id: z.string(),
   query: z.string(),
   interpretation: z.string(),
@@ -102,6 +137,7 @@ export interface JobStatus {
   kind: string;
   state: "running" | "succeeded" | "failed";
   stage: string;
+  startedAt?: number;
   result?: unknown;
   error?: string;
 }

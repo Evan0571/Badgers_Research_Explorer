@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   return new Response(null, {
     status: 303,
     headers: {
-      Location: `${config().origin}/explore/mail?outlook=${status}`,
+      Location: `${config().origin}/explore/settings?outlook=${status}`,
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
     },

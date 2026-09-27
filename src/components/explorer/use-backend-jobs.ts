@@ -1,5 +1,11 @@
 "use client";
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { APIError, requestJSON, waitForJob } from "@/lib/api";
 import { searchResultSchema, draftSchema } from "@/lib/contracts";
 import type { Workspace } from "@/lib/types";
@@ -31,6 +37,8 @@ export function useBackendJobs(
   ready: boolean,
   setWorkspace: Dispatch<SetStateAction<Workspace>>,
 ) {
+  const active = useRef<Partial<Record<Kind, AbortController>>>({});
+  const [searchStartedAt, setSearchStartedAt] = useState<number | null>(null);
   const [searchStage, setSearchStage] = useState("");
   const [draftStage, setDraftStage] = useState("");
   const [searchError, setSearchError] = useState("");
@@ -51,6 +59,7 @@ export function useBackendJobs(
         matchAll: false,
         department: "",
         recruitment: "",
+        undergraduateFilters: {},
         creditOnly: false,
         catalog: [
           ...new Map(
@@ -77,9 +86,10 @@ export function useBackendJobs(
     try {
       const data = await waitForJob(
         id,
-        (text, partial) => {
+        (text, partial, startedAt) => {
           if (!signal?.aborted) {
             stage(kind, text);
+            if (kind === "search" && startedAt) setSearchStartedAt(startedAt);
             if (kind === "drafts" && partial) apply(kind, partial);
           }
         },
@@ -99,41 +109,103 @@ export function useBackendJobs(
   };
   useEffect(() => {
     if (!ready) return;
-    const controller = new AbortController();
     for (const kind of ["search", "drafts"] as const) {
       const id = pending.read(kind);
       if (id) {
+        const controller = new AbortController();
+        active.current[kind] = controller;
         stage(kind, "Restoring request status");
-        void follow(kind, id, controller.signal);
+        if (kind === "search") setSearchStartedAt(Date.now());
+        void follow(kind, id, controller.signal).finally(() => {
+          if (active.current[kind] === controller) delete active.current[kind];
+        });
       }
     }
-    return () => controller.abort();
+    const current = active.current;
+    return () => {
+      Object.values(current).forEach((controller) => controller?.abort());
+    };
     // Resume only when persisted workspace restoration finishes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
   const start = async (kind: Kind, path: string, input: unknown) => {
+    if (active.current[kind] && !active.current[kind]?.signal.aborted) return;
+    const controller = new AbortController();
+    active.current[kind] = controller;
     stage(kind, "Starting request");
+    if (kind === "search") setSearchStartedAt(Date.now());
     error(kind, "");
     try {
       const previous = pending.read(kind);
       if (previous) {
-        await follow(kind, previous);
-        return;
+        if (kind === "drafts") {
+          await follow(kind, previous, controller.signal);
+          return;
+        }
+        // A retry is a NEW search, never silently replay the previous query.
+        try {
+          await requestJSON(
+            `/api/jobs/${encodeURIComponent(previous)}`,
+            undefined,
+            "DELETE",
+            controller.signal,
+            12000,
+          );
+        } catch (e) {
+          // A missing old job must not prevent submitting the new query.
+          if (!(e instanceof APIError && e.status === 404)) throw e;
+        }
+        pending.save(kind);
       }
-      const { id } = await requestJSON<{ id: string }>(path, input);
+      const { id } = await requestJSON<{ id: string }>(
+        path,
+        input,
+        "POST",
+        controller.signal,
+        15000,
+      );
       pending.save(kind, id);
-      await follow(kind, id);
+      await follow(kind, id, controller.signal);
     } catch (e) {
-      error(kind, e instanceof Error ? e.message : "This request failed.");
-      stage(kind, "");
+      if (!controller.signal.aborted)
+        error(kind, e instanceof Error ? e.message : "This request failed.");
+    } finally {
+      if (active.current[kind] === controller) {
+        delete active.current[kind];
+        stage(kind, "");
+      }
+    }
+  };
+  const stopSearch = async () => {
+    const id = pending.read("search");
+    if (!id) return;
+    try {
+      await requestJSON(
+        `/api/jobs/${encodeURIComponent(id)}`,
+        undefined,
+        "DELETE",
+        undefined,
+        12000,
+      );
+      active.current.search?.abort();
+      delete active.current.search;
+      pending.save("search");
+      setSearchStage("");
+      setSearchError("This task was cancelled.");
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : "This request failed.");
     }
   };
   return {
+    dismissDraftError: () => setDraftError(""),
+    stopSearch,
     searchStage,
+    searchStartedAt,
     draftStage,
     searchError,
     draftError,
-    search: (query: string) => start("search", "/api/search", { query }),
+    search: (query: string, expand = false, refresh = false) =>
+      start("search", "/api/search", { query, expand, refresh }),
     generate: (input: unknown) =>
       start("drafts", "/api/drafts/generate", input),
   };

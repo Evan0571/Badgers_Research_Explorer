@@ -14,8 +14,17 @@ import {
   Copy,
   ArrowUpRight,
 } from "@phosphor-icons/react";
+import { PolishDraft } from "./polish-draft";
+import { useLocale } from "../locale";
+import { errorCopy } from "@/lib/error-copy";
 import { researcherById } from "@/lib/catalog";
-import { draftIssues, normalizeRecipients, personalize } from "@/lib/research";
+import { draftIssues, normalizeRecipients } from "@/lib/research";
+import {
+  applyDraftRevision,
+  matchesDraftSnapshot,
+  previewPersonalDetails,
+  type DraftRevision,
+} from "@/lib/draft-revisions";
 import type { Draft } from "@/lib/types";
 import {
   Badge,
@@ -29,23 +38,32 @@ import {
   Textarea,
 } from "@/components/ui";
 import { useWorkspace } from "./provider";
-import { EmailVerification, type EmailIdentity } from "./email-verification";
+import { useEmailIdentity } from "./use-email-identity";
 import { useMailSubmission } from "./use-mail-submission";
 
 export function MailWorkspace() {
   const { workspace: w, setWorkspace, notify } = useWorkspace();
+  const { t, locale } = useLocale();
   const router = useRouter();
-  const submission = useMailSubmission();
+  const {
+    identity,
+    loading: identityLoading,
+    error: identityError,
+  } = useEmailIdentity();
+  const submission = useMailSubmission(identity?.outlook.connected);
   const [activeId, setActiveId] = useState(w.drafts[0]?.id || "");
   const [preview, setPreview] = useState(false);
-  const [identity, setIdentity] = useState<EmailIdentity | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [personalPreview, setPersonalPreview] = useState("");
+  const [personalPreview, setPersonalPreview] = useState<DraftRevision | null>(
+    null,
+  );
   const [fileError, setFileError] = useState("");
   const [attaching, setAttaching] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = w.drafts.find((d) => d.id === activeId) || w.drafts[0];
+  const personalPreviewChanged =
+    !!personalPreview && !matchesDraftSnapshot(current, personalPreview.base);
   const researcher = current && researcherById(w, current.researcherId);
   const selected = w.drafts.filter(
     (d) =>
@@ -63,6 +81,11 @@ export function MailWorkspace() {
           : d,
       ),
     }));
+  const applyRevision = (revision: DraftRevision) =>
+    setWorkspace((p) => {
+      const drafts = applyDraftRevision(p.drafts, revision);
+      return drafts === p.drafts ? p : { ...p, drafts };
+    });
   useEffect(() => {
     let cancelled = false;
     Promise.all(
@@ -192,53 +215,101 @@ export function MailWorkspace() {
   return (
     <>
       <div className="page-heading">
-        <p className="eyebrow">Thoughtful introductions start here</p>
-        <h1>Make the first hello yours.</h1>
+        <p className="eyebrow">
+          {t("Thoughtful introductions start here", "从一封真诚的邮件开始")}
+        </p>
+        <h1>{t("Make the first hello yours.", "写出属于你的第一封邮件。")}</h1>
         <p>
-          One researcher, one email. Begin with a draft, add what is true for
-          you, then review everything together.
+          {t(
+            "One researcher, one email. Begin with a draft, add what is true for you, then review everything together.",
+            "每位教授一封独立邮件。先准备草稿，补充真实经历，再逐封核对。",
+          )}
         </p>
       </div>
-      <EmailVerification onChange={setIdentity} />
+      {identityError && (
+        <Notice tone="error">
+          {identityError}{" "}
+          <LinkButton href="/explore/settings" variant="ghost">
+            {t("Open settings", "前往设置")}
+          </LinkButton>
+        </Notice>
+      )}
+      {!identityLoading &&
+        identity &&
+        (!identity.verified || !identity.outlook.connected) && (
+          <Notice>
+            {t(
+              "Complete your email setup in Settings before sending. You can keep editing your drafts.",
+              "发送前请在设置中完成邮箱配置。你仍可继续编辑草稿。",
+            )}{" "}
+            <LinkButton href="/explore/settings" variant="ghost">
+              {t("Open settings", "前往设置")}
+            </LinkButton>
+          </Notice>
+        )}
       {!current ? (
         <EmptyState
           icon={<EnvelopeSimple size={35} />}
-          title="A blank page, with a little help."
+          title={t("A blank page, with a little help.", "从一封草稿开始。")}
           action={
             <LinkButton href="/explore/saved">
-              Choose from your shortlist <ArrowRight size={17} />
+              {t("Choose from your shortlist", "从收藏的教授中选择")}{" "}
+              <ArrowRight size={17} />
             </LinkButton>
           }
         >
-          Prepare drafts from a researcher’s details or select email-eligible
-          researchers in your shortlist.
+          {t(
+            "Prepare drafts from a researcher’s details or select email-eligible researchers in your shortlist.",
+            "在教授详情中准备草稿，或在收藏列表中选择可邮件联系的教授。",
+          )}
         </EmptyState>
       ) : (
         <>
+          {current.generation === "local-template" && (
+            <Notice>
+              {t(
+                "Basic template · AI was unavailable. Add your specific research interest and review this message before sending.",
+                "基础邮件模板 · AI 暂不可用。请补充具体研究兴趣，核对后再发送。",
+              )}
+            </Notice>
+          )}
           <div className="selection-toolbar">
             <div className="row wrap">
               <Badge>
-                {w.drafts.length} individual{" "}
-                {w.drafts.length === 1 ? "draft" : "drafts"}
+                {w.drafts.length}{" "}
+                {t(
+                  w.drafts.length === 1
+                    ? "individual draft"
+                    : "individual drafts",
+                  "封独立草稿",
+                )}
               </Badge>
               <span className="small muted">
                 {w.drafts.some((d) => d.generation === "ai")
-                  ? "AI-assisted drafts, ready for your review"
-                  : "Preserved drafts, ready for your edits"}
+                  ? t(
+                      "AI-assisted drafts, ready for your review",
+                      "AI 辅助起草，请逐封核对",
+                    )
+                  : t(
+                      "Preserved drafts, ready for your edits",
+                      "草稿已保留，可继续编辑",
+                    )}
               </span>
             </div>
             <Button onClick={openPreview}>
-              Review drafts <ArrowRight size={17} />
+              {t("Review drafts", "检查草稿")} <ArrowRight size={17} />
             </Button>
           </div>
-          <Notice title="Review before sending">
-            Connect your UW Outlook mailbox. Review every recipient, message and
-            attachment before sending from your own address.
+          <Notice title={t("Review before sending", "发送前请核对")}>
+            {t(
+              "Review every recipient, message and attachment before sending from your own address.",
+              "发送前请检查每位收件人、邮件内容和附件。",
+            )}
           </Notice>
           <div className="mail-layout">
             <aside className="draft-list" aria-label="Email drafts">
               <div className="draft-list-heading">
-                <span>RECIPIENTS</span>
+                <span>{t("RECIPIENTS", "收件人")}</span>
                 <span>{w.drafts.length}</span>
               </div>
               {w.drafts.map((d) => (
@@ -250,6 +321,7 @@ export function MailWorkspace() {
                   aria-pressed={current.id === d.id}
                   onClick={() => {
                     setActiveId(d.id);
+                    setPersonalPreview(null);
                     setFileError("");
                   }}
                 >
@@ -260,8 +332,8 @@ export function MailWorkspace() {
                     </strong>
                     <small>
                       {draftIssues(d).length
-                        ? "Needs your review"
-                        : "Ready to review"}
+                        ? t("Needs your review", "需要核对")
+                        : t("Ready to review", "可以核对")}
                     </small>
                   </span>
                 </button>
@@ -271,18 +343,37 @@ export function MailWorkspace() {
               <div className="editor-heading row between">
                 <div>
                   <h2>{researcher?.name}</h2>
-                  <p>Changes saved in this browser</p>
+                  <p>
+                    {t(
+                      "Changes saved in this browser",
+                      "修改已保存在当前浏览器",
+                    )}
+                  </p>
                 </div>
                 <IconButton
-                  label="Delete this draft"
+                  label={t("Delete this draft", "删除此草稿")}
                   onClick={() => setDeleteId(current.id)}
                 >
                   <Trash size={18} />
                 </IconButton>
               </div>
+              <nav
+                className="draft-tools"
+                aria-label={t("Draft tools", "草稿工具")}
+              >
+                <a href="#draft-personalization">
+                  <PencilSimple size={19} />
+                  {t("Personal details", "个人细节")}
+                </a>
+                <a href="#draft-attachments">
+                  <Paperclip size={19} />
+                  {t("Attachments", "邮件附件")}
+                </a>
+                <a href="#draft-polish">{t("Refine with AI", "AI 润色")}</a>
+              </nav>
               <Field
                 id="recipient"
-                label="To"
+                label={t("To", "收件人")}
                 value={current.to}
                 type="email"
                 onChange={(e) =>
@@ -290,45 +381,68 @@ export function MailWorkspace() {
                 }
                 hint={
                   current.recipientEdited
-                    ? "User-entered address. Verify this recipient before sending."
-                    : "Public-source address. This inquiry does not assume an open position."
+                    ? t(
+                        "User-entered address. Verify this recipient before sending.",
+                        "此地址由你修改，请在发送前核对。",
+                      )
+                    : t(
+                        "Public-source address. This inquiry does not assume an open position.",
+                        "地址来自公开来源。发出咨询并不代表教授有空缺名额。",
+                      )
                 }
               />
               <Field
                 id="subject"
-                label="Subject"
+                label={t("Subject", "主题")}
                 value={current.subject}
                 onChange={(e) => update({ subject: e.target.value })}
               />
               <Textarea
                 key={current.id}
                 id="email-body"
-                label="Your message"
+                label={t("Your message", "邮件正文")}
                 className="body-field"
                 rows={16}
                 value={current.body}
                 onChange={(e) => update({ body: e.target.value })}
               />
               {draftIssues(current).length > 0 && (
-                <Notice>{draftIssues(current).join(" ")}</Notice>
+                <Notice>
+                  {draftIssues(current)
+                    .map((issue) => errorCopy(issue, locale))
+                    .join(" ")}
+                </Notice>
               )}
+              <PolishDraft
+                key={`polish-${current.id}`}
+                draft={current}
+                onApply={applyRevision}
+              />
               <details
+                open
+                id="draft-personalization"
                 className="personalization"
                 key={`personal-${current.id}`}
               >
                 <summary>
                   <PencilSimple size={17} />
-                  Add a few personal details <Badge>Optional</Badge>
+                  {t("Add a few personal details", "添加个人细节")}{" "}
+                  <Badge>{t("Optional", "选填")}</Badge>
                 </summary>
                 <p className="small muted">
-                  Only add experiences and interests that are true for you.
-                  These answers affect this draft only.
+                  {t(
+                    "Only add true details. Preview and apply them to add them to the current message, including any AI revision you have already applied. An unapplied AI preview is a separate version.",
+                    "只填写真实信息。预览并应用后，细节才会加入当前邮件正文（包括已应用的 AI 润色）；尚未应用的 AI 预览是另一个版本。",
+                  )}
                 </p>
                 <Textarea
                   id="personal-interest"
-                  label="What about this research interests you?"
+                  label={t(
+                    "What about this research interests you?",
+                    "这项研究的哪些内容吸引你？",
+                  )}
                   rows={2}
-                  placeholder="I’m curious about…"
+                  placeholder={t("I’m curious about…", "我感兴趣的是……")}
                   value={current.answers.interest}
                   onChange={(e) =>
                     update({
@@ -338,9 +452,15 @@ export function MailWorkspace() {
                 />
                 <Textarea
                   id="personal-experience"
-                  label="Any experience you want to mention?"
+                  label={t(
+                    "Any experience you want to mention?",
+                    "有什么想提及的经历？",
+                  )}
                   rows={2}
-                  placeholder="A course, a project, or that you are exploring research for the first time."
+                  placeholder={t(
+                    "A course, a project, or that you are exploring research for the first time.",
+                    "可以是一门课程、一个项目，或说明你正在初次尝试研究。",
+                  )}
                   value={current.answers.experience}
                   onChange={(e) =>
                     update({
@@ -353,9 +473,12 @@ export function MailWorkspace() {
                 />
                 <Textarea
                   id="personal-request"
-                  label="What would you like to ask?"
+                  label={t("What would you like to ask?", "你想询问什么？")}
                   rows={2}
-                  placeholder="For example, how undergraduates can get involved."
+                  placeholder={t(
+                    "For example, how undergraduates can get involved.",
+                    "例如：本科生可以通过什么途径参与研究。",
+                  )}
                   value={current.answers.request}
                   onChange={(e) =>
                     update({
@@ -368,22 +491,26 @@ export function MailWorkspace() {
                   disabled={
                     !Object.values(current.answers).some((v) => v.trim())
                   }
-                  onClick={() => setPersonalPreview(personalize(current))}
+                  onClick={() =>
+                    setPersonalPreview(previewPersonalDetails(current))
+                  }
                 >
-                  Preview additions <ArrowRight size={16} />
+                  {t("Preview additions", "预览添加的内容")}{" "}
+                  <ArrowRight size={16} />
                 </Button>
               </details>
-              <div className="attachments">
+              <div className="attachments" id="draft-attachments">
                 <div className="row between">
-                  <strong className="small">Attachments</strong>
+                  <h2>{t("Attachments", "邮件附件")}</h2>
                   <Button
-                    variant="ghost"
-                    size="sm"
+                    variant="secondary"
                     disabled={attaching}
                     onClick={() => fileRef.current?.click()}
                   >
                     <Paperclip size={17} />
-                    {attaching ? "Saving…" : "Attach a file"}
+                    {attaching
+                      ? t("Saving…", "正在保存…")
+                      : t("Attach a file", "添加附件")}
                   </Button>
                 </div>
                 <input
@@ -419,8 +546,10 @@ export function MailWorkspace() {
                   ))
                 ) : (
                   <p className="attachment-hint">
-                    No attachments. Your uploaded résumé is never attached
-                    automatically.
+                    {t(
+                      "No attachments. Your uploaded résumé is never attached automatically.",
+                      "尚未添加附件。之前上传的简历不会自动作为邮件附件。",
+                    )}
                   </p>
                 )}
                 {fileError && <Notice tone="error">{fileError}</Notice>}
@@ -428,11 +557,11 @@ export function MailWorkspace() {
               <div className="editor-actions">
                 <Button variant="secondary" onClick={copyDraft}>
                   <Copy size={17} />
-                  Copy draft
+                  {t("Copy draft", "复制草稿")}
                 </Button>
                 <Button variant="ghost" onClick={() => exportDrafts([current])}>
                   <DownloadSimple size={17} />
-                  Export text
+                  {t("Export text", "导出文本")}
                 </Button>
               </div>
               {researcher && (
@@ -443,7 +572,8 @@ export function MailWorkspace() {
                   className="quiet-link"
                   style={{ marginTop: 20 }}
                 >
-                  Check original contact source <ArrowUpRight size={15} />
+                  {t("Check original contact source", "查看原始联系来源")}{" "}
+                  <ArrowUpRight size={15} />
                 </a>
               )}
             </section>
@@ -453,30 +583,31 @@ export function MailWorkspace() {
       <Dialog
         open={preview}
         onOpenChange={setPreview}
-        title="Review your introductions"
-        description="Each selection is a separate email to one researcher."
+        title={t("Review your introductions", "检查每封联系邮件")}
+        description={t(
+          "Each selection is a separate email to one researcher.",
+          "每个选中的草稿会单独发送给一位教授。",
+        )}
         wide
       >
         <div className="preview-body">
           {identity?.outlook?.connected ? (
             <Notice>
-              From: {identity.outlook.email}. Sent through your Outlook mailbox,
-              with a copy in Sent Items. Replies return to this address.
+              {t("From:", "发件邮箱：")} {identity.outlook.email}.{" "}
+              {t(
+                "Sent through your Outlook mailbox, with a copy in Sent Items. Replies return to this address.",
+                "通过你的 Outlook 邮箱发送，并保存至已发送邮件。回复会发送到此地址。",
+              )}
             </Notice>
           ) : (
             <Notice>
-              Connect your verified UW mailbox before sending.{" "}
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setPreview(false);
-                  document
-                    .getElementById("mail-account")
-                    ?.scrollIntoView({ block: "start" });
-                }}
-              >
-                Go to mailbox connection
-              </Button>
+              {t(
+                "Complete your email setup in Settings before sending.",
+                "请先在设置中完成邮箱配置，再发送邮件。",
+              )}{" "}
+              <LinkButton href="/explore/settings" variant="ghost">
+                {t("Open settings", "前往设置")}
+              </LinkButton>
             </Notice>
           )}
           {submission.error && (
@@ -520,8 +651,8 @@ export function MailWorkspace() {
                     tone={issues.length || missingFile ? "negative" : "neutral"}
                   >
                     {issues.length || missingFile
-                      ? "Needs edits"
-                      : "Ready to review"}
+                      ? t("Needs edits", "需要修改")
+                      : t("Ready to review", "可以核对")}
                   </Badge>
                 </summary>
                 <p className="mail-meta">
@@ -567,11 +698,12 @@ export function MailWorkspace() {
               onClick={() => exportDrafts(selected)}
             >
               <DownloadSimple size={17} />
-              Export selected
+              {t("Export selected", "导出选中的草稿")}
             </Button>
             <Button
               disabled={
                 !submission.capability?.sendEnabled ||
+                identityLoading ||
                 !identity?.verified ||
                 !identity?.outlook?.connected ||
                 submission.busy ||
@@ -602,9 +734,12 @@ export function MailWorkspace() {
       </Dialog>
       <Dialog
         open={!!personalPreview}
-        onOpenChange={(v) => !v && setPersonalPreview("")}
-        title="Review your additions"
-        description="Apply only if these statements are accurate for you."
+        onOpenChange={(v) => !v && setPersonalPreview(null)}
+        title={t("Review your additions", "检查新增内容")}
+        description={t(
+          "Apply only if these statements are accurate for you.",
+          "确认内容真实准确后再应用。",
+        )}
       >
         <div className="preview-body">
           <pre
@@ -613,23 +748,47 @@ export function MailWorkspace() {
               font: "12px/1.9 var(--font-body)",
             }}
           >
-            {personalPreview}
+            {personalPreview?.patch.body}
           </pre>
+          {personalPreviewChanged && (
+            <Notice>
+              {t(
+                "Your draft or personal details have changed since this preview. Refresh it before applying so newer edits are kept.",
+                "生成预览后，草稿或个人细节已有变化。请更新预览后再应用，以保留最新修改。",
+              )}
+              {current && (
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setPersonalPreview(previewPersonalDetails(current))
+                  }
+                >
+                  {t("Refresh additions preview", "更新个人细节预览")}
+                </Button>
+              )}
+            </Notice>
+          )}
           <div className="preview-actions">
-            <Button variant="secondary" onClick={() => setPersonalPreview("")}>
-              Keep original
+            <Button
+              variant="secondary"
+              onClick={() => setPersonalPreview(null)}
+            >
+              {t("Keep original", "保留原稿")}
             </Button>
             <Button
+              disabled={!personalPreview || personalPreviewChanged}
               onClick={() => {
-                update({
-                  body: personalPreview,
-                  answers: { interest: "", experience: "", request: "" },
-                });
-                setPersonalPreview("");
+                if (
+                  !personalPreview ||
+                  !matchesDraftSnapshot(current, personalPreview.base)
+                )
+                  return;
+                applyRevision(personalPreview);
+                setPersonalPreview(null);
               }}
             >
               <Check size={17} />
-              Apply to this draft
+              {t("Apply to this draft", "应用到当前草稿")}
             </Button>
           </div>
         </div>
@@ -637,13 +796,16 @@ export function MailWorkspace() {
       <Dialog
         open={!!deleteId}
         onOpenChange={(v) => !v && setDeleteId(null)}
-        title="Delete this draft?"
-        description="This removes the draft and its attachments from this browser."
+        title={t("Delete this draft?", "删除这封草稿？")}
+        description={t(
+          "This removes the draft and its attachments from this browser.",
+          "这会移除当前浏览器中的草稿及其附件。",
+        )}
       >
         <div className="preview-body">
           <div className="preview-actions">
             <Button variant="secondary" onClick={() => setDeleteId(null)}>
-              Keep draft
+              {t("Keep draft", "保留草稿")}
             </Button>
             <Button
               variant="danger"
@@ -670,7 +832,7 @@ export function MailWorkspace() {
                 }
               }}
             >
-              Delete draft
+              {t("Delete draft", "删除草稿")}
             </Button>
           </div>
         </div>

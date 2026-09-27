@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import {
+  Children,
+  isValidElement,
   useEffect,
   useState,
   useRef,
@@ -11,6 +13,7 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
+import * as SelectPrimitive from "@radix-ui/react-select";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   ArrowUpRight,
@@ -22,6 +25,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
+import { useLocale } from "../locale";
 
 export function Button({
   variant = "primary",
@@ -155,15 +159,80 @@ export function Select({
   label,
   className,
   children,
-  ...props
+  value,
+  onChange,
+  id,
+  name,
+  disabled,
 }: SelectHTMLAttributes<HTMLSelectElement> & { label: string }) {
-  const id = props.id || props.name;
+  const options = Children.toArray(children).flatMap((child) =>
+    isValidElement<{ value?: string; children: ReactNode; disabled?: boolean }>(
+      child,
+    )
+      ? [
+          {
+            value: String(child.props.value ?? child.props.children),
+            label: child.props.children,
+            disabled: child.props.disabled,
+          },
+        ]
+      : [],
+  );
+  const empty = "__select_empty__";
   return (
     <div className={clsx("field", className)}>
-      <label htmlFor={id}>{label}</label>
-      <select {...props} id={id}>
-        {children}
-      </select>
+      <label id={`${id}-label`} htmlFor={id}>
+        {label}
+      </label>
+      <SelectPrimitive.Root
+        name={name}
+        value={String(value ?? "") || empty}
+        disabled={disabled}
+        onValueChange={(next) =>
+          onChange?.({
+            target: { value: next === empty ? "" : next },
+            currentTarget: { value: next === empty ? "" : next },
+          } as React.ChangeEvent<HTMLSelectElement>)
+        }
+      >
+        <SelectPrimitive.Trigger
+          id={id}
+          className="select-trigger"
+          aria-labelledby={`${id}-label`}
+        >
+          <SelectPrimitive.Value />
+          <SelectPrimitive.Icon>⌄</SelectPrimitive.Icon>
+        </SelectPrimitive.Trigger>
+        <SelectPrimitive.Portal>
+          <SelectPrimitive.Content
+            className="select-content"
+            position="popper"
+            sideOffset={6}
+          >
+            <SelectPrimitive.ScrollUpButton className="select-scroll">
+              ⌃
+            </SelectPrimitive.ScrollUpButton>
+            <SelectPrimitive.Viewport>
+              {options.map((o) => (
+                <SelectPrimitive.Item
+                  className="select-item"
+                  key={o.value}
+                  value={o.value || empty}
+                  disabled={o.disabled}
+                >
+                  <SelectPrimitive.ItemText>{o.label}</SelectPrimitive.ItemText>
+                  <SelectPrimitive.ItemIndicator>
+                    <Check size={17} />
+                  </SelectPrimitive.ItemIndicator>
+                </SelectPrimitive.Item>
+              ))}
+            </SelectPrimitive.Viewport>
+            <SelectPrimitive.ScrollDownButton className="select-scroll">
+              ⌄
+            </SelectPrimitive.ScrollDownButton>
+          </SelectPrimitive.Content>
+        </SelectPrimitive.Portal>
+      </SelectPrimitive.Root>
     </div>
   );
 }
@@ -224,6 +293,7 @@ export function Dialog({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useLocale();
   const opener = useRef<HTMLElement | null>(null);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -249,7 +319,7 @@ export function Dialog({
               </DialogPrimitive.Description>
             </div>
             <DialogPrimitive.Close asChild>
-              <IconButton label="Close dialog">
+              <IconButton label={t("Close dialog", "关闭弹窗")}>
                 <X size={21} />
               </IconButton>
             </DialogPrimitive.Close>
@@ -277,6 +347,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 export function ThemeToggle() {
+  const { t } = useLocale();
   const [dark, setDark] = useState(false);
   useEffect(() => {
     const query = matchMedia("(prefers-color-scheme: dark)");
@@ -295,7 +366,11 @@ export function ThemeToggle() {
   }, []);
   return (
     <IconButton
-      label={dark ? "Use light theme" : "Use dark theme"}
+      label={
+        dark
+          ? t("Use light theme", "切换浅色主题")
+          : t("Use dark theme", "切换深色主题")
+      }
       onClick={() => {
         const next = !dark;
         setDark(next);

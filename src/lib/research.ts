@@ -70,7 +70,14 @@ export function canEmail(r: Researcher) {
   return (
     r.contact.route === "email" &&
     !!r.contact.email &&
-    r.recruitment !== "closed"
+    (r.undergraduate
+      ? r.undergraduate.applications.value !== "no" &&
+        (r.undergraduate.openings.value !== "no" ||
+          r.undergraduate.applications.value === "yes") &&
+        !r.undergraduate.contactOptions.some(
+          (o) => o.required && o.kind !== "email",
+        )
+      : r.recruitment !== "closed")
   );
 }
 export function makeDraft(
@@ -84,12 +91,12 @@ export function makeDraft(
   const identity = [background.year, background.major]
     .filter(Boolean)
     .join(" ");
-  const body = `Dear Professor ${r.name.split(" ").at(-1)},\n\nMy name is ${background.name.trim() || "[Your name]"}, and I am ${identity ? `a ${identity} student` : "a student"} at UW-Madison. I am exploring undergraduate research and am interested in ${r.title.toLowerCase()}.\n\n${background.experience.trim() ? `A little about my background: ${background.experience.trim()}\n\n` : ""}I am still learning about your work. Could you let me know whether there is an appropriate way for an undergraduate to get involved, or where I could learn about the application process? I understand that opportunities may not currently be available.\n\nThank you for your time.\n\nBest,\n${background.name.trim() || "[Your name]"}`;
+  const body = `Dear Professor ${r.name.split(" ").at(-1)},\n\nMy name is ${background.name.trim() || "[Your name]"}, and I am ${identity ? `a ${identity} student` : "a student"} at UW-Madison. I am exploring undergraduate research and would like to learn more about your work.\n\n${background.experience.trim() ? `A little about my background: ${background.experience.trim()}\n\n` : ""}Could you let me know whether there is an appropriate way for an undergraduate to get involved, or where I could learn about the application process? I understand that opportunities may not currently be available.\n\nThank you for your time.\n\nBest,\n${background.name.trim() || "[Your name]"}`;
   return {
     id,
     researcherId: r.id,
     to: r.contact.email!,
-    subject: `Undergraduate research inquiry: ${r.title.toLowerCase()}`,
+    subject: "Undergraduate research inquiry",
     body,
     recipientEdited: false,
     updatedAt: new Date().toISOString(),

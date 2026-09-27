@@ -1,4 +1,5 @@
 "use client";
+import { useLocale } from "../locale";
 import { useEffect, useRef, useState } from "react";
 import { ClockCounterClockwise, ArrowRight } from "@phosphor-icons/react";
 import {
@@ -10,7 +11,7 @@ import {
   Textarea,
   Dialog,
 } from "@/components/ui";
-import { EmailVerification, type EmailIdentity } from "./email-verification";
+import { useEmailIdentity } from "./use-email-identity";
 import { requestJSON } from "@/lib/api";
 import type { DeliverySnapshot } from "@/lib/types";
 
@@ -24,7 +25,12 @@ const labels = {
   cancelled: "Cancelled",
 };
 export function HistoryView() {
-  const [identity, setIdentity] = useState<EmailIdentity | null>(null);
+  const { t, locale } = useLocale();
+  const {
+    identity,
+    loading: identityLoading,
+    error: identityError,
+  } = useEmailIdentity();
   const [records, setRecords] = useState<DeliveryRecord[]>([]),
     [error, setError] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -55,6 +61,7 @@ export function HistoryView() {
     setNotes({});
     setRecords([]);
     setRetry(null);
+    setLoading(false);
     if (identity?.verified) void refresh();
     return () => {
       epoch.current++;
@@ -69,41 +76,79 @@ export function HistoryView() {
   return (
     <>
       <div className="page-heading">
-        <p className="eyebrow">Keep the next step clear</p>
-        <h1>Your contact history.</h1>
+        <p className="eyebrow">
+          {t("Keep the next step clear", "记录每一次联系")}
+        </p>
+        <h1>{t("Your contact history.", "你的联系记录。")}</h1>
         <p>
-          A record of each individual message, with its original content and an
-          honest status.
+          {t(
+            "A record of each individual message, with its original content and an honest status.",
+            "逐封保留原始邮件内容及其真实提交状态。",
+          )}
         </p>
       </div>
-      <EmailVerification onChange={setIdentity} />
+      {identityError && <Notice tone="error">{identityError}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
-      <Notice>
-        “Accepted” means the email service accepted the request. It does not
-        mean delivered, read, or replied. Reply progress below is recorded by
-        you.
-      </Notice>
+      {identity?.verified && (
+        <Notice>
+          {t(
+            "“Accepted” means the email service accepted the request. It does not mean delivered, read, or replied. Reply progress below is recorded by you.",
+            "“已接受”表示邮件服务已接受发送请求，不代表邮件已送达、已读或已回复。下方的回复进度由你手动记录。",
+          )}
+        </Notice>
+      )}
       {identity?.verified && (
         <Button
           variant="ghost"
           disabled={loading}
           onClick={() => void refresh()}
         >
-          {loading ? "Loading history…" : "Refresh history"}
+          {loading
+            ? t("Loading history…", "正在加载记录…")
+            : t("Refresh history", "刷新记录")}
         </Button>
       )}
-      {!records.length ? (
+      {identityLoading && !identity ? (
+        <p role="status">
+          {t("Loading contact history…", "正在加载联系记录…")}
+        </p>
+      ) : !identity?.verified ? (
         <EmptyState
           icon={<ClockCounterClockwise size={35} />}
-          title="No submissions in this account."
+          title={t(
+            "Verify your email to view contact history.",
+            "验证邮箱后查看联系记录。",
+          )}
           action={
-            <LinkButton href="/explore/mail" variant="secondary">
-              Open email workspace <ArrowRight size={17} />
+            <LinkButton href="/explore/settings" variant="secondary">
+              {t("Open settings", "前往设置")} <ArrowRight size={17} />
             </LinkButton>
           }
         >
-          Drafts and exports do not create sending records. Verify your UW email
-          to view submissions for this browser and account.
+          {t(
+            "Your past submissions are linked to your verified UW email. Manage verification in Settings.",
+            "历史联系记录与你验证的 UW 邮箱关联。请前往设置完成验证。",
+          )}
+        </EmptyState>
+      ) : loading && !records.length ? (
+        <p role="status">
+          {t("Loading contact history…", "正在加载联系记录…")}
+        </p>
+      ) : !records.length ? (
+        <EmptyState
+          icon={<ClockCounterClockwise size={35} />}
+          title={t("No submissions in this account.", "此账户暂无发送记录。")}
+          action={
+            <LinkButton href="/explore/mail" variant="secondary">
+              {t("Open email workspace", "前往邮件草稿")}{" "}
+              <ArrowRight size={17} />
+            </LinkButton>
+          }
+        >
+          {t(
+            "Submitted emails and their statuses will appear here. Drafts and exports do not create sending records.",
+            "已提交的邮件及其状态会显示在这里。保存或导出草稿不会产生发送记录。",
+          )}
         </EmptyState>
       ) : (
         records.map((record) => (
@@ -230,7 +275,12 @@ export function HistoryView() {
                 Go back
               </Button>
               <Button
-                disabled={busy || !identity?.outlook?.connected}
+                disabled={
+                  busy ||
+                  identityLoading ||
+                  !identity?.verified ||
+                  !identity?.outlook?.connected
+                }
                 onClick={async () => {
                   setBusy(true);
                   try {
@@ -251,6 +301,17 @@ export function HistoryView() {
                 {busy ? "Submitting…" : "Submit this message"}
               </Button>
             </div>
+            {!identityLoading && !identity?.outlook?.connected && (
+              <Notice>
+                {t(
+                  "Connect Outlook in Settings before resubmitting this message.",
+                  "重新提交邮件前，请在设置中连接 Outlook。",
+                )}{" "}
+                <LinkButton href="/explore/settings" variant="ghost">
+                  {t("Open settings", "前往设置")}
+                </LinkButton>
+              </Notice>
+            )}
           </div>
         )}
       </Dialog>

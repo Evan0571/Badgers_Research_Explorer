@@ -2,16 +2,19 @@ import { z } from "zod";
 import { emptyWorkspace } from "./research";
 import type { Workspace } from "./types";
 import { researcherSchema, searchResultSchema } from "./contracts";
+import { undergraduateFiltersSchema } from "./undergraduate";
 export const STORAGE_KEY = "uw-research-explorer:guest:v1";
 const topic = z.string().max(120);
 const schema = z.object({
   version: z.literal(1),
   query: z.string().max(10000),
+  interestDraft: z.string().max(10000).optional(),
   searched: z.boolean(),
   topics: z.array(topic),
   matchAll: z.boolean(),
   department: z.string(),
   recruitment: z.string(),
+  undergraduateFilters: undergraduateFiltersSchema.optional(),
   creditOnly: z.boolean(),
   saved: z.array(z.string()),
   comparison: z.array(z.string()).max(3),
