@@ -140,6 +140,12 @@ docs/                    产品、部署、设计与验证记录
 
 技术文档包含带日期的开发历史；当前托管方式以部署说明为准。
 
+## 贡献者
+
+- [Evan0571](https://github.com/Evan0571)
+- [George050121](https://github.com/George050121)
+- [Sisyphusheep (@zzhangbrooklyn-art)](https://github.com/zzhangbrooklyn-art)
+
 ---
 
 为 **Badger BuildFest** 构建。面向 UW–Madison 的独立学生项目，并非学校官方服务。项目图标与设计参考见[品牌资源](docs/BRAND-ASSET.md)和[设计说明](DESIGN.md)。

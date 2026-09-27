@@ -140,6 +140,12 @@ docs/                    Product, deployment, design, and validation notes
 
 Technical notes include dated development history; the deployment guide describes the current hosting setup.
 
+## Contributors
+
+- [Evan0571](https://github.com/Evan0571)
+- [George050121](https://github.com/George050121)
+- [Sisyphusheep (@zzhangbrooklyn-art)](https://github.com/zzhangbrooklyn-art)
+
 ---
 
 Built for **Badger BuildFest**. An independent student project for UW–Madison, not an official university service. Project mark and design references are documented in [Brand asset](docs/BRAND-ASSET.md) and [Design notes](DESIGN.md).
