@@ -39,13 +39,14 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 export const useLocale = () => useContext(Context);
 export function LanguageToggle() {
   const { locale, setLocale } = useLocale();
+  if (locale === "en") return null;
   return (
     <button
       className="button button-secondary language-toggle"
-      onClick={() => setLocale(locale === "en" ? "zh" : "en")}
-      aria-label={locale === "en" ? "切换为中文" : "Switch to English"}
+      onClick={() => setLocale("en")}
+      aria-label="Switch to English"
     >
-      {locale === "en" ? "中文" : "English"}
+      English
     </button>
   );
 }
